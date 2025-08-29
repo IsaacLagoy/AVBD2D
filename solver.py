@@ -2,24 +2,19 @@
 import glm
 from glm import vec2, vec3, mat3x3, mat3
 from math import isinf
-from maths import sign
-from rigid import Rigid
-from force import Force
-from manifold import Manifold
+from helper.maths import sign
+from shapes.rigid import Rigid
+from forces.force import Force
+from forces.manifold import Manifold
 import time
 from linalg.ldlt import solve
+from helper.constants import DEBUG_TIMING, PENALTY_MAX, PENALTY_MIN
 
-# Global debug control variable
-DEBUG_TIMING = True
-
-PENALTY_MIN = 1e4
-PENALTY_MAX = 1e9
 
 def clamp(x, lo, hi):
     return lo if x < lo else hi if x > hi else x
 
 def diag3(a: float, b: float, c: float) -> mat3x3:
-    # column-major constructor: (c0x, c0y, c0z, c1x, c1y, c1z, c2x, c2y, c2z)
     return mat3(a, 0.0, 0.0,
                 0.0, b, 0.0,
                 0.0, 0.0, c)

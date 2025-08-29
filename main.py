@@ -1,10 +1,14 @@
 import pygame
 from pygame.locals import QUIT
-from rigid import Rigid
+from shapes.rigid import Rigid
 from solver import Solver
 from glm import vec2, vec3
 from random import uniform
-from mesh import Mesh
+from shapes.mesh import Mesh
+from helper.constants import DRAW_FORCE
+
+
+BODIES = 50
 
 
 def main():
@@ -21,11 +25,13 @@ def main():
     
     cube_mesh = Mesh([vec2(-0.5, 0.5), vec2(-0.5, -0.5), vec2(0.5, -0.5), vec2(0.5, 0.5)])
 
-    # add floor
-    solver.bodies.append(Rigid(cube_mesh, vec3(0, 0, 0), vec2(200, 0.75), color=vec3(150), density = -1))
+    # add playbox
+    solver.bodies.append(Rigid(cube_mesh, vec3(0, 0, 0), vec2(30, 0.75), color=vec3(150), density = -1))
+    solver.bodies.append(Rigid(cube_mesh, vec3(15.5, 2, 0), vec2(0.75, 5), color=vec3(150), density = -1))
+    solver.bodies.append(Rigid(cube_mesh, vec3(-15.5, 2, 0), vec2(0.75, 5), color=vec3(150), density = -1))
     
     # add random bodies
-    for _ in range(20):
+    for _ in range(BODIES):
         solver.bodies.append(Rigid(cube_mesh, vec3(0, 6, 0) + [uniform(-5, 5) for _ in range(3)], vec2([uniform(1, 2) for _ in range(2)]), color=vec3(150), density = 1))
 
     running = True
@@ -51,8 +57,9 @@ def main():
         for body in solver.bodies:
             body.draw(screen)
             
-        for force in solver.forces:
-            force.draw(screen)
+        if DRAW_FORCE:
+            for force in solver.forces:
+                force.draw(screen)
 
         pygame.display.flip()
 

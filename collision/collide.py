@@ -1,8 +1,8 @@
 import glm
 from glm import vec3, vec2
-from rigid import Rigid
-from maths import inverse_transform
-from sutherland_hodgman import sutherland_hodgmen
+from shapes.rigid import Rigid
+from helper.maths import inverse_transform
+from collision.sutherland_hodgman import sutherland_hodgmen
 
 
 def axes(body: Rigid) -> list[vec3]:

@@ -1,6 +1,7 @@
 import glm
 from glm import vec2, vec3
 
+
 def cross(a: vec2, b: vec2) -> float:
     return a.x * b.y - a.y * b.x
 

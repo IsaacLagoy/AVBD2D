@@ -1,11 +1,12 @@
 import glm
 from glm import vec2, vec3, mat2x2
 from math import sqrt
-from force import Force
-from rigid import Rigid
-from maths import cross, transform, rotate_scale
-from collide import collide
+from forces.force import Force
+from shapes.rigid import Rigid
+from helper.maths import cross, transform, rotate_scale
+from collision.collide import collide
 import pygame
+
 
 # Constants (you’ll want to put these somewhere central)
 COLLISION_MARGIN = 0.01

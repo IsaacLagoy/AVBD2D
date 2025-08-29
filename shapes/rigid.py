@@ -1,14 +1,14 @@
 import glm
 from glm import vec2, vec3
 import pygame
-from maths import transform
-from mesh import Mesh
+from helper.maths import transform
+from shapes.mesh import Mesh
 from math import sqrt
 
 
 class Rigid():
     
-    def __init__(self, mesh: Mesh, pos: vec3, scale: vec2, vel: vec3=None, friction: float=0.4, density: float=1, color: vec3=None) -> None:
+    def __init__(self, mesh: Mesh, pos: vec3, scale: vec2, vel: vec3=None, friction: float=0.8, density: float=1, color: vec3=None) -> None:
         self.mesh = mesh
         self.pos = pos
         self.scale = scale

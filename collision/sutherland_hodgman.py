@@ -1,5 +1,5 @@
-from maths import inside, segment_intersect
-from rigid import Rigid
+from helper.maths import inside, segment_intersect
+from shapes.rigid import Rigid
 from glm import vec2
 
 

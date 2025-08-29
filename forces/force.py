@@ -1,9 +1,7 @@
-# force.py
-import glm
-from glm import vec2, vec3, mat3x3
-from rigid import Rigid
+from glm import vec3, mat3x3
+from shapes.rigid import Rigid
+from helper.constants import ROWS
 
-ROWS = 4
 
 class Force:
     def __init__(self, body_a: Rigid, body_b: Rigid) -> None:
