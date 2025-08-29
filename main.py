@@ -21,7 +21,7 @@ def main():
     # solver.bodies.append(Rigid(vec3(2, 10, 0), vec2(1, 0.5), color=(50, 200, 50)))
     # solver.bodies.append(Rigid(vec3(-2, 15, 0), vec2(0.75, 0.75), color=(50, 80, 200)))
     solver.bodies.append(Rigid(cube_mesh, vec3(0, 0, 0), vec2(5, 0.75), color=(50, 50, 50), density = -1))
-    solver.bodies.append(Rigid(cube_mesh, vec3(0, 1, 0) + vec3([uniform(-1, 1) for _ in range(3)]), vec2([uniform(1, 2) for _ in range(2)]), color=(50, 80, 200), density = 1))
+    solver.bodies.append(Rigid(cube_mesh, vec3(0, 1, 0) + vec3([uniform(0, 0) for _ in range(3)]), vec2([uniform(1, 2) for _ in range(2)]), color=(50, 80, 200), density = 1))
 
     running = True
     while running:
