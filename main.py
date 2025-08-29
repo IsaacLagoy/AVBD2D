@@ -17,7 +17,6 @@ def main():
     clock = pygame.time.Clock()
     
     # FPS counter variables
-    fps_font = pygame.font.Font(None, 36)
     fps_timer = 0
     current_fps = 0
 
@@ -50,7 +49,7 @@ def main():
             fps_timer = 0
 
         # step physics
-        solver.step(dt)
+        solver.step(max(dt, 1e-8))
 
         # draw
         screen.fill((30, 30, 30))

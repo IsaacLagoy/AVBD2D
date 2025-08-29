@@ -142,15 +142,15 @@ class Solver:
 
                         # diagonally lumped geometric stiffness G (Sec 3.5)
                         # PyGLM mat3 is column-major; mat[0], mat[1], mat[2] are vec3 columns
-                        Hc0 = force.H[r][0]  # vec3
+                        Hc0 = force.H[r][0] # vec3
                         Hc1 = force.H[r][1]
                         Hc2 = force.H[r][2]
                         G = diag3(glm.length(Hc0), glm.length(Hc1), glm.length(Hc2)) * abs(f)
 
                         # accumulate (Eq. 13,17)
-                        J = force.J[r]  # vec3
+                        J = force.J[r]
                         rhs += J * f
-                        lhs += glm.outerProduct(J, J * force.penalty[r]) # + G
+                        lhs += glm.outerProduct(J, J * force.penalty[r]) + G
 
                 # Solve SPD system and apply update (Eq. 4)
                 delta = solve(lhs, rhs)
