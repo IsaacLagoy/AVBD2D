@@ -29,9 +29,23 @@ class Solver:
 
         self.gravity: vec2 = vec2(0.0, -10.0)
 
-        # scene
+        # scene - linked list heads
         self.bodies: Rigid = None
         self.forces: Force = None
+
+    def get_bodies_iterator(self):
+        """Generator to iterate through all bodies in the linked list"""
+        current = self.bodies
+        while current is not None:
+            yield current
+            current = current.next
+            
+    def get_forces_iterator(self):
+        """Generator to iterate through all forces in the linked list"""
+        current = self.forces
+        while current is not None:
+            yield current
+            current = current.next
 
     def step(self, dt: float) -> None:
         start_time = time.perf_counter()
@@ -40,13 +54,17 @@ class Solver:
         # Broadphase (naive O(n^2))
         # -------------------------
         broadphase_start = time.perf_counter()
-        for i, A in enumerate(self.bodies):
-            A = self.bodies[i]
-            for B in self.bodies[i + 1:]:
+        
+        # Convert linked list to list for easier iteration
+        bodies_list = list(self.get_bodies_iterator())
+        
+        for i, A in enumerate(bodies_list):
+            for B in bodies_list[i + 1:]:
                 dp = (A.pos.xy - B.pos.xy)  # vec2
                 r = A.radius + B.radius
                 if glm.dot(dp, dp) <= r * r and not A.is_constrained_to(B):
-                    self.forces.append(Manifold(A, B))
+                    # Create new manifold force - it will add itself to the linked lists
+                    Manifold(self, A, B)
         
         broadphase_time = time.perf_counter() - broadphase_start
         if DEBUG_TIMING:
@@ -56,22 +74,25 @@ class Solver:
         # Initialize & warmstart all forces
         # --------------------------------
         force_init_start = time.perf_counter()
-        i = 0
-        while i < len(self.forces):
-            force = self.forces[i]
+        
+        current_force = self.forces
+        while current_force is not None:
+            next_force = current_force.next  # Save next before potential removal
 
-            if not force.initialize():
+            if not current_force.initialize():
                 # force inactive this step — remove it
-                self.remove(self.forces[i])
+                self.remove(current_force)
+                current_force = next_force
                 continue
 
             # warmstart duals and penalties (Eq. 19)
-            for k in range(force.rows()):
-                force.lamb[k] *= self.alpha * self.gamma
-                force.penalty[k] = clamp(force.penalty[k] * self.gamma, PENALTY_MIN, PENALTY_MAX)
+            for k in range(current_force.rows()):
+                current_force.lamb[k] *= self.alpha * self.gamma
+                current_force.penalty[k] = clamp(current_force.penalty[k] * self.gamma, PENALTY_MIN, PENALTY_MAX)
                 # clamp by material stiffness for non-hard constraints
-                force.penalty[k] = min(force.penalty[k], force.stiffness[k])
-            i += 1
+                current_force.penalty[k] = min(current_force.penalty[k], current_force.stiffness[k])
+            
+            current_force = next_force
         
         force_init_time = time.perf_counter() - force_init_start
         if DEBUG_TIMING:
@@ -83,24 +104,27 @@ class Solver:
         body_init_start = time.perf_counter()
         gravity = self.gravity.y
 
-        for body in self.bodies:
+        current_body = self.bodies
+        while current_body is not None:
             # limit angular velocity
-            body.vel.z = clamp(body.vel.z, -10.0, 10.0)
+            current_body.vel.z = clamp(current_body.vel.z, -10.0, 10.0)
 
             # inertial (Eq. 2)
-            body.inertial = body.pos + body.vel * dt
-            if body.mass > 0:
-                body.inertial += vec3(0, gravity, 0) * (dt * dt)
+            current_body.inertial = current_body.pos + current_body.vel * dt
+            if current_body.mass > 0:
+                current_body.inertial += vec3(0, gravity, 0) * (dt * dt)
 
             # adaptive warmstart (original VBD)
-            accel = (body.vel - body.prev_vel) / dt  # vec3
+            accel = (current_body.vel - current_body.prev_vel) / dt  # vec3
             accel_ext = accel.y * sign(gravity)
             accel_weight = glm.clamp(accel_ext / abs(gravity), 0, 1)
             if isinf(accel_weight): accel_weight = 0
 
             # save x- and warmstart position
-            body.initial = body.pos
-            body.pos = body.pos + body.vel * dt + vec3(0, gravity, 0) * (accel_weight * dt * dt)
+            current_body.initial = current_body.pos
+            current_body.pos = current_body.pos + current_body.vel * dt + vec3(0, gravity, 0) * (accel_weight * dt * dt)
+            
+            current_body = current_body.next
         
         body_init_time = time.perf_counter() - body_init_start
         if DEBUG_TIMING:
@@ -115,22 +139,24 @@ class Solver:
             
             # ---- Primal update ----
             primal_start = time.perf_counter()
-            for body in self.bodies:
-                if body.mass <= 0:
+            current_body = self.bodies
+            while current_body is not None:
+                if current_body.mass <= 0:
+                    current_body = current_body.next
                     continue
 
                 # LHS/RHS (Eqs. 5,6)
-                M = diag3(body.mass, body.mass, body.moment)
+                M = diag3(current_body.mass, current_body.mass, current_body.moment)
                 inv_dt2 = 1.0 / (dt * dt)
                 lhs = M * inv_dt2
-                rhs = (M * inv_dt2) * (body.pos - body.inertial)
+                rhs = (M * inv_dt2) * (current_body.pos - current_body.inertial)
 
                 # iterate forces acting on this body
-                for force in body.forces:
+                for force in current_body.get_forces_iterator():
 
                     # compute constraint & derivatives
                     force.computeConstraint(self.alpha)
-                    force.computeDerivatives(body)
+                    force.computeDerivatives(current_body)
 
                     for r in range(force.rows()):
                         # lambda=0 if not a hard constraint
@@ -154,33 +180,38 @@ class Solver:
 
                 # Solve SPD system and apply update (Eq. 4)
                 delta = solve(lhs, rhs)
-                body.pos -= delta
+                current_body.pos -= delta
+                
+                current_body = current_body.next
             
             primal_time = time.perf_counter() - primal_start
 
             # ---- Dual update ----
             dual_start = time.perf_counter()
-            for force in self.forces:
+            current_force = self.forces
+            while current_force is not None:
 
-                force.computeConstraint(self.alpha)
+                current_force.computeConstraint(self.alpha)
 
-                for r in range(force.rows()):
-                    lam = force.lamb[r] if isinf(force.stiffness[r]) else 0
+                for r in range(current_force.rows()):
+                    lam = current_force.lamb[r] if isinf(current_force.stiffness[r]) else 0
 
                     # Eq. 11 (do not include motors in dual update)
-                    force.lamb[r] = clamp(force.penalty[r] * force.C[r] + lam,
-                                          force.fmin[r], force.fmax[r])
+                    current_force.lamb[r] = clamp(current_force.penalty[r] * current_force.C[r] + lam,
+                                          current_force.fmin[r], current_force.fmax[r])
 
                     # fracture
-                    if abs(force.lamb[r]) >= force.fracture[r]:
-                        force.disable()
+                    if abs(current_force.lamb[r]) >= current_force.fracture[r]:
+                        current_force.disable()
 
                     # Eq. 16 — increment penalty within bounds if within force limits
-                    if force.lamb[r] > force.fmin[r] and force.lamb[r] < force.fmax[r]:
-                        force.penalty[r] = min(
-                            force.penalty[r] + self.beta * abs(force.C[r]),
-                            min(PENALTY_MAX, force.stiffness[r])
+                    if current_force.lamb[r] > current_force.fmin[r] and current_force.lamb[r] < current_force.fmax[r]:
+                        current_force.penalty[r] = min(
+                            current_force.penalty[r] + self.beta * abs(current_force.C[r]),
+                            min(PENALTY_MAX, current_force.stiffness[r])
                         )
+                
+                current_force = current_force.next
             
             dual_time = time.perf_counter() - dual_start
             iteration_time = time.perf_counter() - iteration_start
@@ -196,10 +227,12 @@ class Solver:
         # Velocity update (BDF1)
         # ----------------
         velocity_start = time.perf_counter()
-        for body in self.bodies:
-            body.prev_vel = body.vel
-            if body.mass > 0:
-                body.vel = (body.pos - body.initial) / dt
+        current_body = self.bodies
+        while current_body is not None:
+            current_body.prev_vel = current_body.vel
+            if current_body.mass > 0:
+                current_body.vel = (current_body.pos - current_body.initial) / dt
+            current_body = current_body.next
         
         velocity_time = time.perf_counter() - velocity_start
         if DEBUG_TIMING:
@@ -213,15 +246,36 @@ class Solver:
                 
     def remove(self, value):
         if isinstance(value, Force):
-            if value not in self.forces:
-                return
+            # Remove from solver's force linked list
+            if self.forces is value:
+                self.forces = value.next
+            else:
+                prev = None
+                current = self.forces
+                while current is not None and current is not value:
+                    prev = current
+                    current = current.next
+                if current is value and prev is not None:
+                    prev.next = value.next
             
-            self.forces.remove(value)
-    
+            # Remove from both bodies' force lists
             body_a = value.body_a
             body_b = value.body_b
             
-            if body_a and value in body_a.forces:
-                body_a.forces.remove(value)
-            if body_b and value in body_b.forces:
-                body_b.forces.remove(value)
+            if body_a:
+                body_a.remove_force(value)
+            if body_b and body_b is not body_a:
+                body_b.remove_force(value)
+                
+        elif isinstance(value, Rigid):
+            # Remove from solver's body linked list
+            if self.bodies is value:
+                self.bodies = value.next
+            else:
+                prev = None
+                current = self.bodies
+                while current is not None and current is not value:
+                    prev = current
+                    current = current.next
+                if current is value and prev is not None:
+                    prev.next = value.next

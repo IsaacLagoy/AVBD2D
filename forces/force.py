@@ -5,10 +5,10 @@ from helper.constants import ROWS
 
 class Force:
     def __init__(self, solver, body_a: Rigid, body_b: Rigid) -> None:
-        # add self to solver linked list and body linked lists
+        # add self to solver linked list
         self.solver = solver
         self.next = solver.forces
-        self.solver = self
+        solver.forces = self  # Fixed: was setting self.solver = self
         
         self.body_a = body_a
         self.body_b = body_b
@@ -16,10 +16,12 @@ class Force:
         self.next_a = None
         self.next_b = None
         
+        # Link to body_a's force list
         if body_a:
             self.next_a = body_a.forces
             body_a.forces = self
             
+        # Link to body_b's force list  
         if body_b:
             self.next_b = body_b.forces
             body_b.forces = self
@@ -36,31 +38,26 @@ class Force:
 
         self.penalty = [0 for _ in range(ROWS)]
         self.lamb = [0 for _ in range(ROWS)]
-
-        # link to bodies (mirror the C++ intrusive list semantics)
-        self.body_a.forces.append(self)
-        self.body_b.forces.append(self)
         
     # remove self from solver linked list
     def remove_self(self) -> None:
         # --- Remove from solver list ---
-        node = self.solver.forces
-        if node is self:
+        if self.solver.forces is self:
             self.solver.forces = self.next
         else:
-            prev = node
-            node = node.next
-            while node is not None and node is not self:
-                prev = node
-                node = node.next
-            if node is self:
+            prev = None
+            current = self.solver.forces
+            while current is not None and current is not self:
+                prev = current
+                current = current.next
+            if current is self and prev is not None:
                 prev.next = self.next
 
         # --- Remove from both bodies ---
-        if self.bodyA:
-            self.bodyA.remove_force(self)
-        if self.bodyB and self.bodyB is not self.bodyA:
-            self.bodyB.remove_force(self)
+        if self.body_a:
+            self.body_a.remove_force(self)
+        if self.body_b and self.body_b is not self.body_a:
+            self.body_b.remove_force(self)
 
     def rows(self) -> int: return 0
     def initialize(self) -> bool: return False

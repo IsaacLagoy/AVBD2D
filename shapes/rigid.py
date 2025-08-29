@@ -29,54 +29,68 @@ class Rigid():
         self.inertial = vec3()
         self.initial = vec3()
         
-        # start lined list
+        # start linked list - head of force list for this body
         self.forces = None
         
-        # lasy updating veriables
+        # lazy updating variables
         self.update_vertices = True
         
     # remove self from solver linked list
     def remove_self(self) -> None:
-        p = self.solver
-        if p.bodies is self:
-            p.bodies = self.next
+        if self.solver.bodies is self:
+            self.solver.bodies = self.next
             return
 
-        prev = p.bodies
-        while prev and prev.next is not self:
-            prev = prev.next
+        prev = None
+        current = self.solver.bodies
+        while current is not None and current is not self:
+            prev = current
+            current = current.next
 
-        if prev:
+        if prev is not None and current is self:
             prev.next = self.next
           
     # remove a force from the linked list  
     def remove_force(self, force) -> None:
-        node = self.forces
-
         # Head of the list?
-        if node is force:
+        if self.forces is force:
             # Pick correct next pointer depending on whether this rigid is bodyA or bodyB
             self.forces = force.next_a if force.body_a is self else force.next_b
             return
 
-        prev = node
-        node = node.next_a if node.body_a is self else node.next_b
+        # Traverse the list to find the force
+        prev = None
+        current = self.forces
+        
+        while current is not None and current is not force:
+            prev = current
+            # Move to next force in this body's list
+            current = current.next_a if current.body_a is self else current.next_b
 
-        while node is not None and node is not force:
-            prev = node
-            node = node.next_a if node.body_a is self else node.next_b
-
-        if node is force:
+        # If we found the force, remove it
+        if current is force and prev is not None:
+            # Update the previous node's next pointer
             if prev.body_a is self:
                 prev.next_a = force.next_a if force.body_a is self else force.next_b
             else:
                 prev.next_b = force.next_a if force.body_a is self else force.next_b
         
     def is_constrained_to(self, body) -> bool:
-        for force in self.forces:
-            if body is force.body_a or body is force.body_b:
+        current = self.forces
+        while current is not None:
+            if body is current.body_a or body is current.body_b:
                 return True
+            # Move to next force in this body's list
+            current = current.next_a if current.body_a is self else current.next_b
         return False
+    
+    def get_forces_iterator(self):
+        """Generator to iterate through all forces connected to this body"""
+        current = self.forces
+        while current is not None:
+            yield current
+            # Move to next force in this body's list
+            current = current.next_a if current.body_a is self else current.next_b
         
     def draw(self, screen, scale_factor=20, offset=(400, 300)):
         """Draws the rectangle in Pygame coordinates, accounting for position, rotation, and scale."""
@@ -103,7 +117,7 @@ class Rigid():
         
     @property
     def vertices(self) -> list[vec2]:
-        # lasy check
+        # lazy check
         if not self.update_vertices:
             return self._vertices
         

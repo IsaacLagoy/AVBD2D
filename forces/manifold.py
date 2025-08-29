@@ -30,8 +30,8 @@ class Contact:
 
 
 class Manifold(Force):
-    def __init__(self, body_a: Rigid, body_b: Rigid) -> None:
-        super().__init__(body_a, body_b)
+    def __init__(self, solver, body_a: Rigid, body_b: Rigid) -> None:
+        super().__init__(solver, body_a, body_b)
         self.fmax[0] = self.fmax[2] = 0
         self.fmin[0] = self.fmin[2] = float('-inf')
 
