@@ -3,13 +3,14 @@ from glm import vec2, vec3
 import pygame
 from maths import transform
 from mesh import Mesh
+from math import sqrt
 
 
 class Rigid():
     
     def __init__(self, mesh: Mesh, pos: vec3, scale: vec2, vel: vec3=None, friction: float=0.4, density: float=1, color: vec3=None) -> None:
         self.mesh = mesh
-        self._pos = pos
+        self.pos = pos
         self.scale = scale
         self.vel = vel if vel else vec3(0)
         self.prev_vel = self.vel
@@ -17,7 +18,7 @@ class Rigid():
         self.color = color if color else vec3(0.5)
         
         self.mass = scale.x * scale.y * density
-        self.radius = glm.length(scale)
+        self.radius = max(scale.x, scale.y) * sqrt(2)  # For rectangular shapes
         self.moment = self.mass * glm.dot(scale, scale) / 12
         
         self.inertial = vec3()
@@ -61,4 +62,4 @@ class Rigid():
     @property
     def edges(self) -> list[tuple[vec2, vec2]]:
         vertices = self.vertices
-        return [(vertices[i], vertices[(i + 1) % 4]) for i in range(len(self.vertices))]
+        return [(vertices[i], vertices[(i + 1) % len(self.mesh.vertices)]) for i in range(len(self.vertices))]

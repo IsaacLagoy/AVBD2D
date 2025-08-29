@@ -10,7 +10,7 @@ def axes(body: Rigid) -> list[vec3]:
     seps = []
     for i in range(4):
         edge = glm.normalize(mesh[(i + 1) % len(mesh)] - mesh[i])
-        seps.append((vec2(-edge.y, edge.x), mesh[i], mesh[(i + 1) % len(body.mesh.vertices)]))
+        seps.append((vec2(edge.y, -edge.x), mesh[i], mesh[(i + 1) % len(body.mesh.vertices)]))
     return seps
 
 
@@ -68,8 +68,8 @@ def collide(body_a: Rigid, body_b: Rigid, contacts) -> bool:
     pen_b = sat(body_b, body_a) # b has minimum axis
     
     # no collision
-    if not pen_a and not pen_b:
-        return 0
+    if pen_a is None or pen_b is None:
+        return 0  # No collision if either SAT test fails
     
     is_a = False
     if pen_b is None:
@@ -90,36 +90,32 @@ def collide(body_a: Rigid, body_b: Rigid, contacts) -> bool:
     
     clipped = sutherland_hodgmen(body_b, body_a) if is_a else sutherland_hodgmen(body_a, body_b)
     
-    print('collide')
-    
     if not len(clipped):
         return 0
     
-    print(normal)
+    margin = depth * 0.02
+    c_normal = normal if glm.dot(body_a.pos.xy - body_b.pos.xy, normal) < 0 else -normal
     
-    body_a.color = (255, 0, 0) # TODO remove after debug
-    
-    clipped.sort(key=lambda c: glm.dot(c, normal))
+    clipped.sort(key=lambda c: glm.dot(c, c_normal))
 
     # project points and find the closest
     rA = clipped[-1]
     rB = clipped[0]
     
-    margin = depth * 0.02
-    c_normal = normal if glm.dot(body_a.pos.xy - body_b.pos.xy, normal) < 0 else -normal
+
     
-    contacts[0].normal = c_normal
+    contacts[0].normal = -c_normal
     contacts[0].rA = inverse_transform(body_a.pos, body_a.scale, rA)
     contacts[0].rB = inverse_transform(body_b.pos, body_b.scale, rB)
     
-    rA2 = clipped[-2] if glm.dot(clipped[-2], normal) > glm.dot(clipped[-1], normal) - margin else rA
-    rB2 = clipped[1] if glm.dot(clipped[1], normal) < glm.dot(clipped[0], normal) + margin else rB
+    rA2 = clipped[-2] if glm.dot(clipped[-2], c_normal) > glm.dot(clipped[-1], c_normal) - margin else rA
+    rB2 = clipped[1] if glm.dot(clipped[1], c_normal) < glm.dot(clipped[0], c_normal) + margin else rB
     
     # check if there is only on unique contact point
     if (rA2 == rA and rB2 == rB) or (rB2 == rA or rA2 == rB):
         return 1
     
-    contacts[1].normal = c_normal
+    contacts[1].normal = -c_normal
     contacts[1].rA = inverse_transform(body_a.pos, body_a.scale, rA2)
     contacts[1].rB = inverse_transform(body_b.pos, body_b.scale, rB2)
     

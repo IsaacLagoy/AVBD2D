@@ -1,9 +1,9 @@
 import glm
 from glm import vec2, vec3, mat2x2
-from math import sqrt, inf
+from math import sqrt
 from force import Force
 from rigid import Rigid
-from maths import rotate, cross, transform, rotate_scale
+from maths import cross, transform, rotate_scale
 from collide import collide
 import pygame
 
@@ -91,7 +91,7 @@ class Manifold(Force):
             self.contacts[i].C0 = basis * (
                 (self.body_a.pos.xy + rAW)
                 - (self.body_b.pos.xy + rBW)
-            ) # + vec2(COLLISION_MARGIN, 0)
+            ) + vec2(COLLISION_MARGIN, 0)
 
         return self.num_contacts > 0
 

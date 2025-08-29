@@ -52,15 +52,13 @@ class Solver:
         # --------------------------------
         # Initialize & warmstart all forces
         # --------------------------------
-        # print('warmstarting')
-        # print(self.forces)
         i = 0
         while i < len(self.forces):
             force = self.forces[i]
 
             if not force.initialize():
                 # force inactive this step — remove it
-                self.forces.pop(i)
+                self.remove(self.forces[i])
                 continue
 
             # warmstart duals and penalties (Eq. 19)
@@ -70,8 +68,6 @@ class Solver:
                 # clamp by material stiffness for non-hard constraints
                 force.penalty[k] = min(force.penalty[k], force.stiffness[k])
             i += 1
-            
-        # print(self.forces)
 
         # ------------------------------------
         # Initialize & warmstart all body state
@@ -111,8 +107,6 @@ class Solver:
                 inv_dt2 = 1.0 / (dt * dt)
                 lhs = M * inv_dt2
                 rhs = (M * inv_dt2) * (body.pos - body.inertial)
-                
-                # print('body forces', len(body.forces))
 
                 # iterate forces acting on this body
                 for force in body.forces:
@@ -128,9 +122,6 @@ class Solver:
                         # clamped force magnitude (Sec 3.2)
                         f = clamp(force.penalty[r] * force.C[r] + lam + force.motor[r],
                                      force.fmin[r], force.fmax[r])
-                        
-                        print('f data')
-                        print(force.penalty[r], force.C[r], lam, force.fmin[r], force.fmax[r])
 
                         # diagonally lumped geometric stiffness G (Sec 3.5)
                         # PyGLM mat3 is column-major; mat[0], mat[1], mat[2] are vec3 columns
@@ -142,16 +133,10 @@ class Solver:
                         # accumulate (Eq. 13,17)
                         J = force.J[r]  # vec3
                         rhs += J * f
-                        # print("jacobian")
-                        # print(J, f)
                         lhs += glm.outerProduct(J, J * force.penalty[r]) # + G
 
                 # Solve SPD system and apply update (Eq. 4)
-                # print('sides')
-                print(lhs, rhs)
-                
                 delta = solve_spd(lhs, rhs)
-                print(delta)
                 body.pos -= delta
 
             # ---- Dual update ----
@@ -184,3 +169,19 @@ class Solver:
             body.prev_vel = body.vel
             if body.mass > 0:
                 body.vel = (body.pos - body.initial) / dt
+                
+                
+    def remove(self, value):
+        if isinstance(value, Force):
+            if value not in self.forces:
+                return
+            
+            self.forces.remove(value)
+    
+            body_a = value.body_a
+            body_b = value.body_b
+            
+            if body_a and value in body_a.forces:
+                body_a.forces.remove(value)
+            if body_b and value in body_b.forces:
+                body_b.forces.remove(value)

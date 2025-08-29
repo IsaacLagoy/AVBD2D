@@ -35,13 +35,6 @@ class Force:
         self.stiffness = [0 for _ in range(ROWS)]
         self.penalty = [0 for _ in range(ROWS)]
         self.lamb = [0 for _ in range(ROWS)]
-
-    def __del__(self) -> None:
-        # unhook from bodies
-        if self.body_a and hasattr(self.body_a, "forces") and self in self.body_a.forces:
-            self.body_a.forces.remove(self)
-        if self.body_b and hasattr(self.body_b, "forces") and self in self.body_b.forces:
-            self.body_b.forces.remove(self)
             
     # prints debug information about the force
     def __repr__(self) -> str:
