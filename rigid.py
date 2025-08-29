@@ -26,6 +26,9 @@ class Rigid():
         
         self.forces = []
         
+        # lasy updating veriables
+        self.update_vertices = True
+        
     def is_constrained_to(self, body) -> bool:
         for force in self.forces:
             if body is force.body_a or body is force.body_b:
@@ -53,11 +56,17 @@ class Rigid():
     def pos(self, value) -> None:
         assert isinstance(value, vec3), f'Rigid: pos is not vec3, {type(value)}'
         self._pos = value
+        self.update_vertices = True
         
     @property
     def vertices(self) -> list[vec2]:
-        vs = [transform(self.pos, self.scale, v) for v in self.mesh.vertices]
-        return vs
+        # lasy check
+        if not self.update_vertices:
+            return self._vertices
+        
+        self._vertices = [transform(self.pos, self.scale, v) for v in self.mesh.vertices]
+        self.update_vertices = False
+        return self.vertices
     
     @property
     def edges(self) -> list[tuple[vec2, vec2]]:

@@ -1,11 +1,16 @@
 # solver.py
 import glm
 from glm import vec2, vec3, mat3x3, mat3
-from math import isinf, fabs
+from math import isinf
 from maths import sign
 from rigid import Rigid
 from force import Force
-from manifold import Manifold  # assumes Manifold(body_a, body_b) and .rows() implemented
+from manifold import Manifold
+import time
+from linalg.ldlt import solve
+
+# Global debug control variable
+DEBUG_TIMING = True
 
 PENALTY_MIN = 1e4
 PENALTY_MAX = 1e9
@@ -18,10 +23,6 @@ def diag3(a: float, b: float, c: float) -> mat3x3:
     return mat3(a, 0.0, 0.0,
                 0.0, b, 0.0,
                 0.0, 0.0, c)
-
-def solve_spd(lhs: mat3x3, rhs: vec3) -> vec3:
-    # small 3x3; inversion is fine here
-    return glm.inverse(lhs) * rhs
 
 class Solver:
     def __init__(self) -> None:
@@ -38,9 +39,12 @@ class Solver:
         self.forces: list[Force] = []
 
     def step(self, dt: float) -> None:
+        start_time = time.perf_counter()
+        
         # -------------------------
         # Broadphase (naive O(n^2))
         # -------------------------
+        broadphase_start = time.perf_counter()
         for i, A in enumerate(self.bodies):
             A = self.bodies[i]
             for B in self.bodies[i + 1:]:
@@ -48,10 +52,15 @@ class Solver:
                 r = A.radius + B.radius
                 if glm.dot(dp, dp) <= r * r and not A.is_constrained_to(B):
                     self.forces.append(Manifold(A, B))
+        
+        broadphase_time = time.perf_counter() - broadphase_start
+        if DEBUG_TIMING:
+            print(f"Broadphase: {broadphase_time*1000:.3f}ms")
 
         # --------------------------------
         # Initialize & warmstart all forces
         # --------------------------------
+        force_init_start = time.perf_counter()
         i = 0
         while i < len(self.forces):
             force = self.forces[i]
@@ -68,10 +77,15 @@ class Solver:
                 # clamp by material stiffness for non-hard constraints
                 force.penalty[k] = min(force.penalty[k], force.stiffness[k])
             i += 1
+        
+        force_init_time = time.perf_counter() - force_init_start
+        if DEBUG_TIMING:
+            print(f"Force initialization & warmstart: {force_init_time*1000:.3f}ms")
 
         # ------------------------------------
         # Initialize & warmstart all body state
         # ------------------------------------
+        body_init_start = time.perf_counter()
         gravity = self.gravity.y
 
         for body in self.bodies:
@@ -92,12 +106,20 @@ class Solver:
             # save x- and warmstart position
             body.initial = body.pos
             body.pos = body.pos + body.vel * dt + vec3(0, gravity, 0) * (accel_weight * dt * dt)
+        
+        body_init_time = time.perf_counter() - body_init_start
+        if DEBUG_TIMING:
+            print(f"Body initialization & warmstart: {body_init_time*1000:.3f}ms")
 
         # --------------------
         # Main solver iterations
         # --------------------
-        for _ in range(self.iterations):
+        solver_start = time.perf_counter()
+        for iteration in range(self.iterations):
+            iteration_start = time.perf_counter()
+            
             # ---- Primal update ----
+            primal_start = time.perf_counter()
             for body in self.bodies:
                 if body.mass <= 0:
                     continue
@@ -136,10 +158,13 @@ class Solver:
                         lhs += glm.outerProduct(J, J * force.penalty[r]) # + G
 
                 # Solve SPD system and apply update (Eq. 4)
-                delta = solve_spd(lhs, rhs)
+                delta = solve(lhs, rhs)
                 body.pos -= delta
+            
+            primal_time = time.perf_counter() - primal_start
 
             # ---- Dual update ----
+            dual_start = time.perf_counter()
             for force in self.forces:
 
                 force.computeConstraint(self.alpha)
@@ -161,14 +186,34 @@ class Solver:
                             force.penalty[r] + self.beta * abs(force.C[r]),
                             min(PENALTY_MAX, force.stiffness[r])
                         )
+            
+            dual_time = time.perf_counter() - dual_start
+            iteration_time = time.perf_counter() - iteration_start
+            
+            if DEBUG_TIMING:
+                print(f"  Iteration {iteration+1}: Primal {primal_time*1000:.3f}ms, Dual {dual_time*1000:.3f}ms, Total {iteration_time*1000:.3f}ms")
+        
+        solver_time = time.perf_counter() - solver_start
+        if DEBUG_TIMING:
+            print(f"Main solver iterations ({self.iterations} iterations): {solver_time*1000:.3f}ms")
 
         # ----------------
         # Velocity update (BDF1)
         # ----------------
+        velocity_start = time.perf_counter()
         for body in self.bodies:
             body.prev_vel = body.vel
             if body.mass > 0:
                 body.vel = (body.pos - body.initial) / dt
+        
+        velocity_time = time.perf_counter() - velocity_start
+        if DEBUG_TIMING:
+            print(f"Velocity update: {velocity_time*1000:.3f}ms")
+            
+        total_time = time.perf_counter() - start_time
+        if DEBUG_TIMING:
+            print(f"TOTAL STEP TIME: {total_time*1000:.3f}ms")
+            print("-" * 50)
                 
                 
     def remove(self, value):
