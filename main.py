@@ -8,7 +8,7 @@ from shapes.mesh import Mesh
 from helper.constants import DRAW_FORCE
 
 
-BODIES = 50
+BODIES = 100
 
 
 def main():

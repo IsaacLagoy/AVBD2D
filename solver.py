@@ -30,8 +30,8 @@ class Solver:
         self.gravity: vec2 = vec2(0.0, -10.0)
 
         # scene
-        self.bodies: list[Rigid] = []
-        self.forces: list[Force] = []
+        self.bodies: Rigid = None
+        self.forces: Force = None
 
     def step(self, dt: float) -> None:
         start_time = time.perf_counter()

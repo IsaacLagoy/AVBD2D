@@ -3,12 +3,17 @@ from glm import vec2, vec3
 import pygame
 from helper.maths import transform
 from shapes.mesh import Mesh
-from math import sqrt
 
 
 class Rigid():
     
-    def __init__(self, mesh: Mesh, pos: vec3, scale: vec2, vel: vec3=None, friction: float=0.8, density: float=1, color: vec3=None) -> None:
+    def __init__(self, solver, mesh: Mesh, pos: vec3, scale: vec2, vel: vec3=None, friction: float=0.8, density: float=1, color: vec3=None) -> None:
+        # add to solver linked list
+        self.solver = solver
+        self.next = solver.bodies
+        solver.bodies = self
+        
+        # initialize variables
         self.mesh = mesh
         self.pos = pos
         self.scale = scale
@@ -18,16 +23,54 @@ class Rigid():
         self.color = color if color else vec3(0.5)
         
         self.mass = scale.x * scale.y * density
-        self.radius = max(scale.x, scale.y) * sqrt(2)  # For rectangular shapes
+        self.radius = glm.length(scale)
         self.moment = self.mass * glm.dot(scale, scale) / 12
         
         self.inertial = vec3()
         self.initial = vec3()
         
-        self.forces = []
+        # start lined list
+        self.forces = None
         
         # lasy updating veriables
         self.update_vertices = True
+        
+    # remove self from solver linked list
+    def remove_self(self) -> None:
+        p = self.solver
+        if p.bodies is self:
+            p.bodies = self.next
+            return
+
+        prev = p.bodies
+        while prev and prev.next is not self:
+            prev = prev.next
+
+        if prev:
+            prev.next = self.next
+          
+    # remove a force from the linked list  
+    def remove_force(self, force) -> None:
+        node = self.forces
+
+        # Head of the list?
+        if node is force:
+            # Pick correct next pointer depending on whether this rigid is bodyA or bodyB
+            self.forces = force.next_a if force.body_a is self else force.next_b
+            return
+
+        prev = node
+        node = node.next_a if node.body_a is self else node.next_b
+
+        while node is not None and node is not force:
+            prev = node
+            node = node.next_a if node.body_a is self else node.next_b
+
+        if node is force:
+            if prev.body_a is self:
+                prev.next_a = force.next_a if force.body_a is self else force.next_b
+            else:
+                prev.next_b = force.next_a if force.body_a is self else force.next_b
         
     def is_constrained_to(self, body) -> bool:
         for force in self.forces:
