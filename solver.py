@@ -23,7 +23,7 @@ class Solver:
     def __init__(self) -> None:
         # physics params
         self.iterations = 10
-        self.beta = 1e5      # closer to C++ defaultParams() comment; tune as needed
+        self.beta = 1e5
         self.alpha = 0.99
         self.gamma = 0.99
 
@@ -34,14 +34,18 @@ class Solver:
         self.forces: Force = None
 
     def get_bodies_iterator(self):
-        """Generator to iterate through all bodies in the linked list"""
+        """
+        Iterator for bodies linked list
+        """
         current = self.bodies
         while current is not None:
-            yield current
+            yield current # poggers yield moment
             current = current.next
             
     def get_forces_iterator(self):
-        """Generator to iterate through all forces in the linked list"""
+        """
+        Iterator for forces linked list
+        """
         current = self.forces
         while current is not None:
             yield current

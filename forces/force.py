@@ -25,6 +25,11 @@ class Force:
         if body_b:
             self.next_b = body_b.forces
             body_b.forces = self
+            
+        # increment graph degree tracker only if force is an edge
+        if body_a and body_b:
+            body_a.degree += 1
+            body_b.degree += 1
         
         # initialize variables
         self.J = [vec3() for _ in range(ROWS)]
@@ -58,6 +63,11 @@ class Force:
             self.body_a.remove_force(self)
         if self.body_b and self.body_b is not self.body_a:
             self.body_b.remove_force(self)
+            
+        # reduce graph degree tracker
+        if self.body_a and self.body_b:
+            self.body_a.degree -= 1
+            self.body_b.degree -= 1
 
     def rows(self) -> int: return 0
     def initialize(self) -> bool: return False

@@ -32,6 +32,9 @@ class Rigid():
         # start linked list - head of force list for this body
         self.forces = None
         
+        # graph coloring
+        self.reset_color()
+        
         # lazy updating variables
         self.update_vertices = True
         
@@ -104,6 +107,46 @@ class Rigid():
         
         # Draw the polygon using the transformed corners
         pygame.draw.polygon(screen, self.color, screen_points, 2)
+        
+    def reset_color(self) -> None:
+        self.color_next = None
+        self.color = -1
+        self.degree = 0
+        self.saturation_degree = 0
+        self.used_colors = set()
+        
+    def get_next_unused_color(self) -> None:
+        # loop until unused color is found
+        i = 0
+        while True:
+            if i in self.used_colors():
+                i += 1
+                continue
+            
+            return i
+        
+    def get_forces_iterator(self):
+        """
+        Iterator for forces linked list
+        """
+        current = self.forces
+        while current is not None:
+            yield current
+            current = current.next_a if self is current.body_a else current.next_b
+        
+    def add_color(self, color: int) -> None:
+        # check errors
+        assert self.color == -1, 'Rigid: Colored Rigid was attemping to recolor' # TODO remove this once we get persistent graph coloring
+        assert color not in self.used_colors, 'Rigid: Color is in self.used_colors'
+        
+        self.color = color
+        self.used_colors.add(color)
+        
+        # update the adjacency list (saturation and used colors)
+        for force in self.get_forces_iterator():
+            body = force.body_b if self is force.body_a else force.body_a
+            body.saturation_degree += 1
+            body.used_colors.add(color)
         
     @property
     def pos(self) -> vec3:
