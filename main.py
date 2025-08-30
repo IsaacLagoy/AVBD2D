@@ -49,7 +49,7 @@ def main():
     # add random bodies
     for _ in range(BODIES):
         Rigid(solver, cube_mesh, 
-              vec3(0, 6, 0) + vec3(uniform(-5, 5), uniform(-5, 5), uniform(-5, 5)), 
+              vec3(0, 6, 0) + vec3(uniform(-5, 5), uniform(-5, 5), 0), 
               vec2(uniform(1, 2), uniform(1, 2)), 
               color=vec3(0.6, 0.6, 0.6),  # Default color, will be updated by coloring
               density=1)
@@ -57,7 +57,7 @@ def main():
     # Perform initial graph coloring and update colors
     chromatic_number = 0
     coloring_timer = 0
-    coloring_interval = 1.0  # Recolor every 1 second
+    coloring_interval = 3.0
     
     running = True
     while running:
@@ -81,7 +81,6 @@ def main():
         if coloring_timer >= coloring_interval:
             chromatic_number = update_body_colors(solver)
             coloring_timer = 0
-            print(f"Graph recolored with {chromatic_number} colors")
             
             for rigid in solver.get_bodies_iterator():
                 rigid.color = get_color(rigid.graph_color, chromatic_number)

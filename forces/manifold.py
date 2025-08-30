@@ -162,5 +162,5 @@ class Manifold(Force):
             end_x = int(sx_a + nx * normal_length)
             end_y = int(sy_a - ny * normal_length)  # minus because y is inverted
 
-            pygame.draw.line(screen, (0, 200, 0), (sx_a, sy_a), (end_x, end_y), 2)
+            # pygame.draw.line(screen, (200, 200, 200), (sx_a, sy_a), (end_x, end_y), 1)
 
