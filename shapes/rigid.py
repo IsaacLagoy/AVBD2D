@@ -98,7 +98,7 @@ class Rigid():
             screen_points.append((sx, sy))
         
         # Draw the polygon using the transformed corners
-        pygame.draw.polygon(screen, self.color, screen_points, 2)
+        pygame.draw.polygon(screen, self.color, screen_points, 0)
         
     # --------------------
     # Iterators
