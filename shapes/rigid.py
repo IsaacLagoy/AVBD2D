@@ -125,11 +125,14 @@ class Rigid():
     # --------------------
     # Graph Coloring Methods
     # --------------------
+    
+    def num_adjacent(self) -> int:
+        return sum(1 for _ in self.get_adjacent_bodies())
         
     def reset_coloring(self) -> None:
         self.color_next = None
         self.graph_color = -1
-        self.degree = 0
+        self.degree = self.num_adjacent()
         self.saturation_degree = 0
         self.used_colors = set()
         

@@ -10,6 +10,7 @@ class DSaturPriorityQueue:
     
     def __init__(self) -> None:
         self.heap: list[Rigid] = []  # main heap of Rigid bodies
+        # add hashmap from Rigid* -> int heap index
         
     def compare(self, a: Rigid, b: Rigid) -> bool:
         """Compare two bodies - returns True if a has lower priority than b"""
@@ -110,12 +111,11 @@ class DSaturPriorityQueue:
         """Update a body's priority (useful when saturation changes)"""
         index = self.search(body)
         if index != -1:
-            # Try both directions since priority could have increased or decreased
-            parent_idx = self.parent(index)
-            if (index > 0 and 
-                self.compare(self.heap[parent_idx], self.heap[index])):
-                self._bubble_up(index)
-            else:
+            # Store original position to detect if we need to bubble
+            original_index = index
+            self._bubble_up(index)
+            # If bubble_up didn't move it, try bubble_down
+            if index == original_index:
                 self._bubble_down(index)
     
     def clear(self) -> None:

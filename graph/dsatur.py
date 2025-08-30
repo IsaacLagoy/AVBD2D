@@ -21,7 +21,7 @@ def dsatur_coloring(solver) -> list[Color]:
         to_update = rigid.assign_color(color)
         
         # append to next color
-        if color > len(colors) - 1:
+        if color > len(colors) - 1: # TODO maybe change this to while loop
             colors.append(Color(color))
             
         # insert rigid into color linkedlist

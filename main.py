@@ -6,34 +6,26 @@ from glm import vec2, vec3
 from random import uniform
 from shapes.mesh import Mesh
 from helper.constants import DRAW_FORCE
-from graph.dsatur import color_physics_graph
-from graph.visuals import get_color  # Assume this function is available
+from graph.dsatur import dsatur_coloring
+from graph.visuals import get_color
+
 
 BODIES = 50
 
 def update_body_colors(solver):
     """Update visual colors of all bodies based on their graph coloring"""
-    # Perform graph coloring
-    color_groups = color_physics_graph(solver)
+    # Perform graph coloring using the new DSATUR algorithm
+    color_groups = dsatur_coloring(solver)
     
     if not color_groups:
         print("Warning: Graph coloring failed, using default colors")
         return 0
     
-    # Calculate chromatic number
+    # Calculate chromatic number (number of colors used)
     chromatic_number = len(color_groups)
     
-    # Update visual colors for all bodies
-    current = solver.bodies
-    while current is not None:
-        if hasattr(current, 'graph_color') and current.graph_color != -1:
-            # Get RGB color based on graph color
-            rgb_color = get_color(current.graph_color, chromatic_number)
-            current.color = vec3(rgb_color[0], rgb_color[1], rgb_color[2])
-        else:
-            # Fallback color for uncolored bodies
-            current.color = vec3(128, 128, 128)  # Gray
-        current = current.next
+    # Note: The dsatur_coloring function already assigns visual colors to rigid bodies
+    # So we don't need to manually update colors here anymore
     
     return chromatic_number
 
@@ -50,16 +42,16 @@ def main():
     cube_mesh = Mesh([vec2(-0.5, 0.5), vec2(-0.5, -0.5), vec2(0.5, -0.5), vec2(0.5, 0.5)])
     
     # add playbox (static bodies)
-    Rigid(solver, cube_mesh, vec3(0, 0, 0), vec2(30, 0.75), color=vec3(100, 100, 100), density=-1)
-    Rigid(solver, cube_mesh, vec3(15.5, 2, 0), vec2(0.75, 5), color=vec3(100, 100, 100), density=-1)
-    Rigid(solver, cube_mesh, vec3(-15.5, 2, 0), vec2(0.75, 5), color=vec3(100, 100, 100), density=-1)
+    Rigid(solver, cube_mesh, vec3(0, 0, 0), vec2(30, 0.75), color=vec3(0.4, 0.4, 0.4), density=-1)
+    Rigid(solver, cube_mesh, vec3(15.5, 2, 0), vec2(0.75, 5), color=vec3(0.4, 0.4, 0.4), density=-1)
+    Rigid(solver, cube_mesh, vec3(-15.5, 2, 0), vec2(0.75, 5), color=vec3(0.4, 0.4, 0.4), density=-1)
     
     # add random bodies
     for _ in range(BODIES):
         Rigid(solver, cube_mesh, 
               vec3(0, 6, 0) + vec3(uniform(-5, 5), uniform(-5, 5), uniform(-5, 5)), 
               vec2(uniform(1, 2), uniform(1, 2)), 
-              color=vec3(150, 150, 150),  # Default color, will be updated
+              color=vec3(0.6, 0.6, 0.6),  # Default color, will be updated by coloring
               density=1)
     
     # Perform initial graph coloring and update colors
@@ -90,6 +82,9 @@ def main():
             chromatic_number = update_body_colors(solver)
             coloring_timer = 0
             print(f"Graph recolored with {chromatic_number} colors")
+            
+            for rigid in solver.get_bodies_iterator():
+                rigid.color = get_color(rigid.graph_color, chromatic_number)
             
         # step physics
         solver.step(max(dt, 1e-8))
