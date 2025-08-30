@@ -18,7 +18,6 @@
     - Batch Multithread
     - Concave Collisions
     - Soft Collisions
-    - Improve SAT
 * Main Solver
     - Vectorize (numpy and numba)
     - Multithread

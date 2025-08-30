@@ -5,5 +5,5 @@ PENALTY_MAX = 1e9
 
 
 # debugging
-DRAW_FORCE = False
+DRAW_FORCE = True
 DEBUG_TIMING = True
