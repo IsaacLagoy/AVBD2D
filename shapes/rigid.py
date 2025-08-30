@@ -33,7 +33,7 @@ class Rigid():
         self.forces = None
         
         # graph coloring
-        self.reset_color()
+        self.reset_coloring()
         
         # lazy updating variables
         self.update_vertices = True
@@ -86,14 +86,6 @@ class Rigid():
             # Move to next force in this body's list
             current = current.next_a if current.body_a is self else current.next_b
         return False
-    
-    def get_forces_iterator(self):
-        """Generator to iterate through all forces connected to this body"""
-        current = self.forces
-        while current is not None:
-            yield current
-            # Move to next force in this body's list
-            current = current.next_a if current.body_a is self else current.next_b
         
     def draw(self, screen, scale_factor=20, offset=(400, 300)):
         """Draws the rectangle in Pygame coordinates, accounting for position, rotation, and scale."""
@@ -108,22 +100,18 @@ class Rigid():
         # Draw the polygon using the transformed corners
         pygame.draw.polygon(screen, self.color, screen_points, 2)
         
-    def reset_color(self) -> None:
-        self.color_next = None
-        self.color = -1
-        self.degree = 0
-        self.saturation_degree = 0
-        self.used_colors = set()
-        
-    def get_next_unused_color(self) -> None:
-        # loop until unused color is found
-        i = 0
-        while True:
-            if i in self.used_colors():
-                i += 1
-                continue
-            
-            return i
+    # --------------------
+    # Iterators
+    # --------------------
+    
+    def get_adjacent_bodies(self):
+        """
+        Iterator for rigid body adjacency list
+        """
+        for force in self.get_forces_iterator():
+            other_body = force.body_b if force.body_a is self else force.body_a
+            if other_body:
+                yield other_body
         
     def get_forces_iterator(self):
         """
@@ -134,20 +122,45 @@ class Rigid():
             yield current
             current = current.next_a if self is current.body_a else current.next_b
         
-    def add_color(self, color: int) -> None:
+    # --------------------
+    # Graph Coloring Methods
+    # --------------------
+        
+    def reset_coloring(self) -> None:
+        self.color_next = None
+        self.graph_color = -1
+        self.degree = 0
+        self.saturation_degree = 0
+        self.used_colors = set()
+        
+    def get_next_unused_color(self) -> int:
+        """Find the smallest color not used by any adjacent body"""
+        color_candidate = 0
+        while color_candidate in self.used_colors:
+            color_candidate += 1
+        return color_candidate
+            
+    def is_colored(self) -> bool:
+        return self.graph_color != -1
+        
+    def assign_color(self, color: int) -> None:
         # check errors
-        assert self.color == -1, 'Rigid: Colored Rigid was attemping to recolor' # TODO remove this once we get persistent graph coloring
+        assert not self.is_colored(), 'Rigid: Colored Rigid was attemping to recolor' # TODO remove this once we get persistent graph coloring
         assert color not in self.used_colors, 'Rigid: Color is in self.used_colors'
         
-        self.color = color
+        self.graph_color = color
         self.used_colors.add(color)
         
         # update the adjacency list (saturation and used colors)
-        for force in self.get_forces_iterator():
-            body = force.body_b if self is force.body_a else force.body_a
-            body.saturation_degree += 1
-            body.used_colors.add(color)
-        
+        for adjacent_body in self.get_adjacent_bodies():
+            if not adjacent_body.is_colored():  # Only update uncolored neighbors
+                adjacent_body.used_colors.add(color)
+                adjacent_body.saturation_degree = len(adjacent_body.used_colors)
+                
+    # --------------------
+    # Properties
+    # --------------------
+    
     @property
     def pos(self) -> vec3:
         return self._pos

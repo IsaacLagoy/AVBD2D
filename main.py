@@ -6,8 +6,36 @@ from glm import vec2, vec3
 from random import uniform
 from shapes.mesh import Mesh
 from helper.constants import DRAW_FORCE
+from graph.dsatur import color_physics_graph
+from graph.visuals import get_color  # Assume this function is available
 
 BODIES = 50
+
+def update_body_colors(solver):
+    """Update visual colors of all bodies based on their graph coloring"""
+    # Perform graph coloring
+    color_groups = color_physics_graph(solver)
+    
+    if not color_groups:
+        print("Warning: Graph coloring failed, using default colors")
+        return 0
+    
+    # Calculate chromatic number
+    chromatic_number = len(color_groups)
+    
+    # Update visual colors for all bodies
+    current = solver.bodies
+    while current is not None:
+        if hasattr(current, 'graph_color') and current.graph_color != -1:
+            # Get RGB color based on graph color
+            rgb_color = get_color(current.graph_color, chromatic_number)
+            current.color = vec3(rgb_color[0], rgb_color[1], rgb_color[2])
+        else:
+            # Fallback color for uncolored bodies
+            current.color = vec3(128, 128, 128)  # Gray
+        current = current.next
+    
+    return chromatic_number
 
 def main():
     pygame.init()
@@ -21,18 +49,23 @@ def main():
     
     cube_mesh = Mesh([vec2(-0.5, 0.5), vec2(-0.5, -0.5), vec2(0.5, -0.5), vec2(0.5, 0.5)])
     
-    # add playbox
-    Rigid(solver, cube_mesh, vec3(0, 0, 0), vec2(30, 0.75), color=vec3(150), density=-1)
-    Rigid(solver, cube_mesh, vec3(15.5, 2, 0), vec2(0.75, 5), color=vec3(150), density=-1)
-    Rigid(solver, cube_mesh, vec3(-15.5, 2, 0), vec2(0.75, 5), color=vec3(150), density=-1)
+    # add playbox (static bodies)
+    Rigid(solver, cube_mesh, vec3(0, 0, 0), vec2(30, 0.75), color=vec3(100, 100, 100), density=-1)
+    Rigid(solver, cube_mesh, vec3(15.5, 2, 0), vec2(0.75, 5), color=vec3(100, 100, 100), density=-1)
+    Rigid(solver, cube_mesh, vec3(-15.5, 2, 0), vec2(0.75, 5), color=vec3(100, 100, 100), density=-1)
     
     # add random bodies
     for _ in range(BODIES):
         Rigid(solver, cube_mesh, 
               vec3(0, 6, 0) + vec3(uniform(-5, 5), uniform(-5, 5), uniform(-5, 5)), 
               vec2(uniform(1, 2), uniform(1, 2)), 
-              color=vec3(150), 
+              color=vec3(150, 150, 150),  # Default color, will be updated
               density=1)
+    
+    # Perform initial graph coloring and update colors
+    chromatic_number = 0
+    coloring_timer = 0
+    coloring_interval = 1.0  # Recolor every 1 second
     
     running = True
     while running:
@@ -45,8 +78,18 @@ def main():
         fps_timer += dt
         if fps_timer >= 0.5:
             current_fps = clock.get_fps()
-            pygame.display.set_caption(f"AVBD2D - {current_fps:.1f} fps")
+            title = f"AVBD2D - {current_fps:.1f} fps"
+            if chromatic_number > 0:
+                title += f" - Colors: {chromatic_number}"
+            pygame.display.set_caption(title)
             fps_timer = 0
+        
+        # Update graph coloring periodically
+        coloring_timer += dt
+        if coloring_timer >= coloring_interval:
+            chromatic_number = update_body_colors(solver)
+            coloring_timer = 0
+            print(f"Graph recolored with {chromatic_number} colors")
             
         # step physics
         solver.step(max(dt, 1e-8))
