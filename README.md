@@ -12,7 +12,7 @@
 
 ## TODO
 * Broadphase
-    - Add SAH BVH
+    - Add SAH BVH: O(n^2) -> O(nlogn) but expected is closer to linear
     - Multithread speculative contact pair generation
 * Force Warmstart
     - Batch Multithread

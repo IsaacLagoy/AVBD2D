@@ -1,9 +1,16 @@
+import numpy as np
+
+
 class Color():
     
     def __init__(self, color_id) -> None:
         self.id = color_id
         self.head = None
         self.count = 0
+        
+        # vector components
+        self.rhs = None
+        self.lhs = None
         
     def add_body(self, body) -> None:
         """Add a rigid body to this color's linked list"""
@@ -15,6 +22,13 @@ class Color():
     def is_empty(self) -> bool:
         """Check if this color has no assigned bodies"""
         return self.head is None
+    # --------------------
+    # Vectorized Operations
+    # --------------------
+    
+    def reserve_space(self) -> None:
+        self.rhs = np.zeros((self.count, 3), dtype='float32')
+        self.lhs = np.zeros((self.count, 3, 3), dtype='float32')
     
     # --------------------
     # Iterators

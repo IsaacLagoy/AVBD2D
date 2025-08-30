@@ -10,6 +10,7 @@ import time
 from linalg.ldlt import solve
 from helper.constants import DEBUG_TIMING, PENALTY_MAX, PENALTY_MIN
 from helper.decorators import timer
+from graph.dsatur import dsatur_coloring
 
 
 def clamp(x, lo, hi):
@@ -61,6 +62,7 @@ class Solver:
         self.spherical_broad_collision()
         self.warmstart_forces()
         self.warmstart_bodies(dt)
+        self.colors = dsatur_coloring(self)
 
         # --------------------
         # Main solver iterations
