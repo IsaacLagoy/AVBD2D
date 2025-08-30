@@ -57,7 +57,7 @@ def main():
     # Perform initial graph coloring and update colors
     chromatic_number = 0
     coloring_timer = 0
-    coloring_interval = 3.0
+    coloring_interval = 0
     
     running = True
     while running:

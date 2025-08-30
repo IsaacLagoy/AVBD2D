@@ -9,6 +9,7 @@ from forces.manifold import Manifold
 import time
 from linalg.ldlt import solve
 from helper.constants import DEBUG_TIMING, PENALTY_MAX, PENALTY_MIN
+from helper.decorators import timer
 
 
 def clamp(x, lo, hi):
@@ -32,6 +33,9 @@ class Solver:
         # scene - linked list heads
         self.bodies: Rigid = None
         self.forces: Force = None
+        
+        # parallelization variables
+        self.colors = []
 
     def get_bodies_iterator(self):
         """
@@ -54,85 +58,9 @@ class Solver:
     def step(self, dt: float) -> None:
         start_time = time.perf_counter()
         
-        # -------------------------
-        # Broadphase (naive O(n^2))
-        # -------------------------
-        broadphase_start = time.perf_counter()
-        
-        # Convert linked list to list for easier iteration
-        bodies_list = list(self.get_bodies_iterator())
-        
-        for i, A in enumerate(bodies_list):
-            for B in bodies_list[i + 1:]:
-                dp = (A.pos.xy - B.pos.xy)  # vec2
-                r = A.radius + B.radius
-                if glm.dot(dp, dp) <= r * r and not A.is_constrained_to(B):
-                    # Create new manifold force - it will add itself to the linked lists
-                    Manifold(self, A, B)
-        
-        broadphase_time = time.perf_counter() - broadphase_start
-        if DEBUG_TIMING:
-            print(f"Broadphase: {broadphase_time*1000:.3f}ms")
-
-        # --------------------------------
-        # Initialize & warmstart all forces
-        # --------------------------------
-        force_init_start = time.perf_counter()
-        
-        current_force = self.forces
-        while current_force is not None:
-            next_force = current_force.next  # Save next before potential removal
-
-            if not current_force.initialize():
-                # force inactive this step — remove it
-                self.remove(current_force)
-                current_force = next_force
-                continue
-
-            # warmstart duals and penalties (Eq. 19)
-            for k in range(current_force.rows()):
-                current_force.lamb[k] *= self.alpha * self.gamma
-                current_force.penalty[k] = clamp(current_force.penalty[k] * self.gamma, PENALTY_MIN, PENALTY_MAX)
-                # clamp by material stiffness for non-hard constraints
-                current_force.penalty[k] = min(current_force.penalty[k], current_force.stiffness[k])
-            
-            current_force = next_force
-        
-        force_init_time = time.perf_counter() - force_init_start
-        if DEBUG_TIMING:
-            print(f"Force initialization & warmstart: {force_init_time*1000:.3f}ms")
-
-        # ------------------------------------
-        # Initialize & warmstart all body state
-        # ------------------------------------
-        body_init_start = time.perf_counter()
-        gravity = self.gravity.y
-
-        current_body = self.bodies
-        while current_body is not None:
-            # limit angular velocity
-            current_body.vel.z = clamp(current_body.vel.z, -10.0, 10.0)
-
-            # inertial (Eq. 2)
-            current_body.inertial = current_body.pos + current_body.vel * dt
-            if current_body.mass > 0:
-                current_body.inertial += vec3(0, gravity, 0) * (dt * dt)
-
-            # adaptive warmstart (original VBD)
-            accel = (current_body.vel - current_body.prev_vel) / dt  # vec3
-            accel_ext = accel.y * sign(gravity)
-            accel_weight = glm.clamp(accel_ext / abs(gravity), 0, 1)
-            if isinf(accel_weight): accel_weight = 0
-
-            # save x- and warmstart position
-            current_body.initial = current_body.pos
-            current_body.pos = current_body.pos + current_body.vel * dt + vec3(0, gravity, 0) * (accel_weight * dt * dt)
-            
-            current_body = current_body.next
-        
-        body_init_time = time.perf_counter() - body_init_start
-        if DEBUG_TIMING:
-            print(f"Body initialization & warmstart: {body_init_time*1000:.3f}ms")
+        self.spherical_broad_collision()
+        self.warmstart_forces()
+        self.warmstart_bodies(dt)
 
         # --------------------
         # Main solver iterations
@@ -227,26 +155,101 @@ class Solver:
         if DEBUG_TIMING:
             print(f"Main solver iterations ({self.iterations} iterations): {solver_time*1000:.3f}ms")
 
-        # ----------------
-        # Velocity update (BDF1)
-        # ----------------
-        velocity_start = time.perf_counter()
+
+        self.update_velocities(dt)
+            
+        total_time = time.perf_counter() - start_time
+        if DEBUG_TIMING:
+            print(f"TOTAL STEP TIME: {total_time*1000:.3f}ms")
+            print("-" * 50)
+            
+    # --------------------
+    # BroadPhase
+    # --------------------
+    
+    @timer('Broadphase', on=DEBUG_TIMING)
+    def spherical_broad_collision(self) -> None:
+        # Convert linked list to list for easier iteration
+        bodies_list = list(self.get_bodies_iterator())
+        
+        for i, A in enumerate(bodies_list):
+            for B in bodies_list[i + 1:]:
+                dp = (A.pos.xy - B.pos.xy)  # vec2
+                r = A.radius + B.radius
+                if glm.dot(dp, dp) <= r * r and not A.is_constrained_to(B):
+                    # Create new manifold force - it will add itself to the linked lists
+                    Manifold(self, A, B)
+                    
+    # ------------------------------------
+    # Force Warmstart and Narrow Collision
+    # ------------------------------------
+            
+    @timer('Warmstart Forces', on=DEBUG_TIMING)        
+    def warmstart_forces(self) -> None:
+        current_force = self.forces
+        while current_force is not None:
+            next_force = current_force.next  # Save next before potential removal
+
+            if not current_force.initialize():
+                # force inactive this step — remove it
+                self.remove(current_force)
+                current_force = next_force
+                continue
+
+            # warmstart duals and penalties (Eq. 19)
+            for k in range(current_force.rows()):
+                current_force.lamb[k] *= self.alpha * self.gamma
+                current_force.penalty[k] = clamp(current_force.penalty[k] * self.gamma, PENALTY_MIN, PENALTY_MAX)
+                # clamp by material stiffness for non-hard constraints
+                current_force.penalty[k] = min(current_force.penalty[k], current_force.stiffness[k])
+            
+            current_force = next_force
+            
+    # ------------------------------------
+    # Initialize & warmstart all body state
+    # ------------------------------------
+
+    @timer('Warmstart Bodies', on=DEBUG_TIMING)     
+    def warmstart_bodies(self, dt: float) -> None:
+        gravity = self.gravity.y
+
+        current_body = self.bodies
+        while current_body is not None:
+            # limit angular velocity
+            current_body.vel.z = clamp(current_body.vel.z, -10.0, 10.0)
+
+            # inertial (Eq. 2)
+            current_body.inertial = current_body.pos + current_body.vel * dt
+            if current_body.mass > 0:
+                current_body.inertial += vec3(0, gravity, 0) * (dt * dt)
+
+            # adaptive warmstart (original VBD)
+            accel = (current_body.vel - current_body.prev_vel) / dt  # vec3
+            accel_ext = accel.y * sign(gravity)
+            accel_weight = glm.clamp(accel_ext / abs(gravity), 0, 1)
+            if isinf(accel_weight): accel_weight = 0
+
+            # save x- and warmstart position
+            current_body.initial = current_body.pos
+            current_body.pos = current_body.pos + current_body.vel * dt + vec3(0, gravity, 0) * (accel_weight * dt * dt)
+            
+            current_body = current_body.next
+            
+    # ----------------
+    # Velocity update (BDF1)
+    # ----------------
+    
+    def update_velocities(self, dt: float) -> None:
         current_body = self.bodies
         while current_body is not None:
             current_body.prev_vel = current_body.vel
             if current_body.mass > 0:
                 current_body.vel = (current_body.pos - current_body.initial) / dt
             current_body = current_body.next
-        
-        velocity_time = time.perf_counter() - velocity_start
-        if DEBUG_TIMING:
-            print(f"Velocity update: {velocity_time*1000:.3f}ms")
-            
-        total_time = time.perf_counter() - start_time
-        if DEBUG_TIMING:
-            print(f"TOTAL STEP TIME: {total_time*1000:.3f}ms")
-            print("-" * 50)
                 
+    # --------------------
+    # Subobject Management
+    # --------------------
                 
     def remove(self, value):
         if isinstance(value, Force):
