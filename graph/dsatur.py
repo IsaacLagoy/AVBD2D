@@ -1,109 +1,34 @@
-from typing import List, Dict
 from graph.color import Color
 from graph.priority_queue import DSaturPriorityQueue
 from shapes.rigid import Rigid
 
-
-def dsatur_coloring(solver) -> tuple[int, List[Color]]:
-    """
-    DSATUR graph coloring algorithm using linked lists and priority queue.
-    
-    Args:
-        solver: Physics solver containing linked list of bodies
-        
-    Returns:
-        tuple: (chromatic_number, list_of_colors)
-    """
-    
-    # Initialize priority queue and collect all bodies
+# TODO enure that this works on disconnected graphs
+def dsatur_coloring(solver) -> list[Color]:
+    # create priority queue
     pq = DSaturPriorityQueue()
-    bodies = []
-    
-    # Collect all bodies from solver's linked list
-    current = solver.bodies
-    while current is not None:
-        current.reset_coloring()  # Reset any previous coloring
-        bodies.append(current)
-        current = current.next
-    
-    if not bodies:
-        return 0, []
-    
-    # Initialize saturation degrees and add to priority queue
-    for body in bodies:
-        body.update_saturation()  # Should be 0 initially
-        pq.push(body)
-    
-    # Initialize color tracking
-    colors: List[Color] = []
-    next_color_id = 0
-    colored_count = 0
-    total_bodies = len(bodies)
-    
-    # Main DSATUR loop
-    while colored_count < total_bodies and not pq.is_empty():
-        # Select body with highest saturation degree
-        selected_body = pq.pop()
-        if selected_body is None:
-            break
+    for rigid in solver.get_bodies_iterator():
+        rigid.reset_coloring() # TODO ensure that this is the correct lovcation for resetting
+        pq.insert(rigid)
+        
+    colors: list[Color] = []
+       
+    while len(pq):
+        # get the vertex with the highest degree
+        rigid: Rigid = pq.pop()
+        
+        # color rigid
+        color = rigid.get_next_unused_color()
+        to_update = rigid.assign_color(color)
+        
+        # append to next color
+        if color > len(colors) - 1:
+            colors.append(Color(color))
             
-        # Update saturation one more time to be safe
-        selected_body.update_saturation()
+        # insert rigid into color linkedlist
+        colors[color].add_body(rigid)
         
-        # Find the smallest available color
-        available_color = selected_body.get_next_unused_color()
-        
-        # Ensure we have enough color objects
-        while len(colors) <= available_color:
-            colors.append(Color(len(colors)))
-        
-        # Assign body to color
-        colors[available_color].add_body(selected_body)
-        colored_count += 1
-        
-        # Update saturation degrees of adjacent uncolored bodies
-        for adjacent_body in selected_body.get_adjacent_bodies():
-            if not adjacent_body.is_colored():
-                old_saturation = adjacent_body.saturation_degree
-                adjacent_body.update_saturation()
-                
-                # Update priority queue if saturation changed
-                if adjacent_body.saturation_degree != old_saturation:
-                    pq.update(adjacent_body)
-    
-    # Calculate chromatic number (number of colors actually used)
-    chromatic_number = sum(1 for color in colors if not color.is_empty())
-    
-    return chromatic_number, colors
-
-def get_color_groups(colors: List[Color]) -> List[List]:
-    """
-    Convert Color objects to lists of Rigid bodies for easier processing.
-    Returns only non-empty color groups.
-    """
-    color_groups = []
-    
-    for color in colors:
-        if not color.is_empty():
-            group = list(color.get_bodies_iterator())
-            color_groups.append(group)
-    
-    return color_groups
-
-def color_physics_graph(solver):
-    """
-    Main function to color the physics constraint graph and return color groups.
-    """
-    # Perform DSATUR coloring
-    chromatic_number, colors = dsatur_coloring(solver)
-    
-    # # Verify the coloring is correct
-    # if not verify_coloring(colors):
-    #     print("ERROR: Invalid coloring detected!")
-    #     return None
-    
-    # # Print results (optional)
-    # print_coloring_results(chromatic_number, colors)
-    
-    # Return color groups for parallel processing
-    return get_color_groups(colors)
+        # update adjacent bodies in the pq
+        for adj in to_update:
+            pq.update(adj)
+            
+    return colors

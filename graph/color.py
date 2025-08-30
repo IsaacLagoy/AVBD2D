@@ -10,12 +10,15 @@ class Color():
         # Insert at head for O(1) insertion
         body.color_next = self.head
         self.head = body
-        body.graph_color = self.id
         self.count += 1
         
     def is_empty(self) -> bool:
         """Check if this color has no assigned bodies"""
         return self.head is None
+    
+    # --------------------
+    # Iterators
+    # --------------------
         
     def get_bodies_iterator(self):
         """Generator to iterate through all bodies in this color"""

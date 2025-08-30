@@ -143,7 +143,7 @@ class Rigid():
     def is_colored(self) -> bool:
         return self.graph_color != -1
         
-    def assign_color(self, color: int) -> None:
+    def assign_color(self, color: int) -> list:
         # check errors
         assert not self.is_colored(), 'Rigid: Colored Rigid was attemping to recolor' # TODO remove this once we get persistent graph coloring
         assert color not in self.used_colors, 'Rigid: Color is in self.used_colors'
@@ -151,11 +151,19 @@ class Rigid():
         self.graph_color = color
         self.used_colors.add(color)
         
+        # this list will store the rigid bodies that are adjacent to this one and have their satuartion degree changed
+        to_update = []
+        
         # update the adjacency list (saturation and used colors)
         for adjacent_body in self.get_adjacent_bodies():
-            if not adjacent_body.is_colored():  # Only update uncolored neighbors
-                adjacent_body.used_colors.add(color)
-                adjacent_body.saturation_degree = len(adjacent_body.used_colors)
+            if adjacent_body.is_colored() or color in adjacent_body.used_colors:  # Only update uncolored neighbors
+                continue
+                
+            adjacent_body.used_colors.add(color)
+            adjacent_body.saturation_degree += 1
+            to_update.append(adjacent_body)
+            
+        return to_update
                 
     # --------------------
     # Properties
