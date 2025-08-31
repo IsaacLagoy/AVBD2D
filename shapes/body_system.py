@@ -57,6 +57,9 @@ class BodySystem():
         index = self.free_indices.pop()
         
         self.pos[index]      = [i for i in pos]
+        self.initial[index]  = [i for i in pos]
+        self.inertial[index] = [i for i in pos]
+        
         self.vel[index]      = [i for i in vel]
         self.prev_vel[index] = [i for i in vel]
         
