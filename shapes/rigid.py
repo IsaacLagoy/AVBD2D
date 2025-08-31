@@ -1,5 +1,6 @@
 import glm
 from glm import vec2, vec3
+from helper.maths import transform
 from shapes.mesh import Mesh
 from shapes.body_system import BodySystem
 import pygame
@@ -10,17 +11,20 @@ class Rigid():
     def __init__(self, system: BodySystem, mesh: Mesh, pos: vec3, scale: vec2, vel: vec3=None, friction: float=0.8, density: float=1, color: vec3=None) -> None:
         self.system = system
         
+        # default parameter values
+        vel = vel if vel is not None else vec3()
+        
         # add self to solver linked list
         self.next = self.solver.bodies
         self.solver.bodies = self
         
         self.mesh = mesh
         self.scale = scale
-        self.color = color
+        self.color = color if color is not None else vec3(0.5)
         
         # compute mass and moment TODO this is only correct for the basic cube mesh
         mass = scale.x * scale.y * density
-        moment = self.mass * glm.dot(scale, scale) / 12
+        moment = mass * glm.dot(scale, scale) / 12
         
         # broad collision
         self.radius = glm.length(scale)
@@ -36,7 +40,7 @@ class Rigid():
         self.reset_coloring()
         
         # lazy update vertices # TODO replace this with inverse transformations
-        self.update_vertcies = True
+        self.update_vertices = True
         
     # --------------------
     # Self Linked List Operations
@@ -184,6 +188,21 @@ class Rigid():
     @property
     def solver(self):
         return self.system.solver
+    
+    @property
+    def vertices(self) -> list[vec2]:
+        # lazy check
+        if not self.update_vertices:
+            return self._vertices
+        
+        self._vertices = [transform(self.pos, self.scale, v) for v in self.mesh.vertices]
+        self.update_vertices = False
+        return self.vertices
+    
+    @property
+    def edges(self) -> list[tuple[vec2, vec2]]:
+        vertices = self.vertices
+        return [(vertices[i], vertices[(i + 1) % len(self.mesh.vertices)]) for i in range(len(self.vertices))]
     
     # body system properties
     @property

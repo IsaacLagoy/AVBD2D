@@ -14,16 +14,16 @@ class ForceSystem():
         self.J = np.zeros((self.max_forces, ROWS, 3), dtype='float32')
         self.H = np.zeros((self.max_forces, ROWS, 3, 3), dtype='float32')
         
-        self.C     = np.zeros(max_forces, dtype='float32')
-        self.motor = np.zeros(max_forces, dtype='float32')
+        self.C     = np.zeros((max_forces, ROWS), dtype='float32')
+        self.motor = np.zeros((max_forces, ROWS), dtype='float32')
         
-        self.stiffness = np.full(max_forces, np.inf,  dtype='float32')
-        self.fmax      = np.full(max_forces, np.inf,  dtype='float32')
-        self.fmin      = np.full(max_forces, -np.inf, dtype='float32')
-        self.fracture  = np.full(max_forces, np.inf,  dtype='float32')
+        self.stiffness = np.full((max_forces, ROWS), np.inf,  dtype='float32')
+        self.fmax      = np.full((max_forces, ROWS), np.inf,  dtype='float32')
+        self.fmin      = np.full((max_forces, ROWS), -np.inf, dtype='float32')
+        self.fracture  = np.full((max_forces, ROWS), np.inf,  dtype='float32')
         
-        self.penalty = np.zeros(max_forces, dtype='float32')
-        self.lamb    = np.zeros(max_forces, dtype='float32')
+        self.penalty = np.zeros((max_forces, ROWS), dtype='float32')
+        self.lamb    = np.zeros((max_forces, ROWS), dtype='float32')
         
         # track empty indices
         self.free_indices = set(range(max_forces))
@@ -40,19 +40,19 @@ class ForceSystem():
             new_max = self.max_forces * 2
             
             # allocate new arrays
-            self.J = np.vstack([self.J, np.zeros((self.max_forces, 2, 3), dtype='float32')])
-            self.H = np.vstack([self.H, np.zeros((self.max_forces, 2, 3, 3), dtype='float32')])
+            self.J = np.vstack([self.J, np.zeros((self.max_forces, ROWS, 3), dtype='float32')])
+            self.H = np.vstack([self.H, np.zeros((self.max_forces, ROWS, 3, 3), dtype='float32')])
             
-            self.C     = np.hstack([self.C,     np.zeros(self.max_forces, dtype='float32')])
-            self.motor = np.hstack([self.motor, np.zeros(self.max_forces, dtype='float32')])
+            self.C     = np.vstack([self.C,     np.zeros((self.max_forces, ROWS), dtype='float32')])
+            self.motor = np.vstack([self.motor, np.zeros((self.max_forces, ROWS), dtype='float32')])
             
-            self.stiffness = np.hstack([self.stiffness, np.full(self.max_forces, np.inf,  dtype='float32')])
-            self.fmax      = np.hstack([self.fmax,      np.full(self.max_forces, np.inf,  dtype='float32')])
-            self.fmin      = np.hstack([self.fmin,      np.full(self.max_forces, -np.inf, dtype='float32')])
-            self.fracture  = np.hstack([self.fracture,  np.full(self.max_forces, np.inf,  dtype='float32')])
+            self.stiffness = np.vstack([self.stiffness, np.full((self.max_forces, ROWS), np.inf,  dtype='float32')])
+            self.fmax      = np.vstack([self.fmax,      np.full((self.max_forces, ROWS), np.inf,  dtype='float32')])
+            self.fmin      = np.vstack([self.fmin,      np.full((self.max_forces, ROWS), -np.inf, dtype='float32')])
+            self.fracture  = np.vstack([self.fracture,  np.full((self.max_forces, ROWS), np.inf,  dtype='float32')])
             
-            self.penalty = np.hstack([self.penalty, np.zeros(self.max_forces, dtype='float32')])
-            self.lamb    = np.hstack([self.lamb,    np.zeros(self.max_forces, dtype='float32')])
+            self.penalty = np.vstack([self.penalty, np.zeros((self.max_forces, ROWS), dtype='float32')])
+            self.lamb    = np.vstack([self.lamb,    np.zeros((self.max_forces, ROWS), dtype='float32')])
             
             # add new free indices
             self.free_indices.update(range(self.max_forces, new_max))

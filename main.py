@@ -42,13 +42,13 @@ def main():
     cube_mesh = Mesh([vec2(-0.5, 0.5), vec2(-0.5, -0.5), vec2(0.5, -0.5), vec2(0.5, 0.5)])
     
     # add playbox (static bodies)
-    Rigid(solver, cube_mesh, vec3(0, 0, 0), vec2(30, 0.75), color=vec3(0.4, 0.4, 0.4), density=-1)
-    Rigid(solver, cube_mesh, vec3(15.5, 2, 0), vec2(0.75, 5), color=vec3(0.4, 0.4, 0.4), density=-1)
-    Rigid(solver, cube_mesh, vec3(-15.5, 2, 0), vec2(0.75, 5), color=vec3(0.4, 0.4, 0.4), density=-1)
+    Rigid(solver.body_system, cube_mesh, vec3(0, 0, 0), vec2(30, 0.75), color=vec3(0.4, 0.4, 0.4), density=-1)
+    Rigid(solver.body_system, cube_mesh, vec3(15.5, 2, 0), vec2(0.75, 5), color=vec3(0.4, 0.4, 0.4), density=-1)
+    Rigid(solver.body_system, cube_mesh, vec3(-15.5, 2, 0), vec2(0.75, 5), color=vec3(0.4, 0.4, 0.4), density=-1)
     
     # add random bodies
     for _ in range(BODIES):
-        Rigid(solver, cube_mesh, 
+        Rigid(solver.body_system, cube_mesh, 
               vec3(0, 6, 0) + vec3(uniform(-5, 5), uniform(-5, 5), 0), 
               vec2(uniform(1, 2), uniform(1, 2)), 
               color=vec3(0.6, 0.6, 0.6),  # Default color, will be updated by coloring
