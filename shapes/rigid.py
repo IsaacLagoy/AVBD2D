@@ -204,46 +204,49 @@ class Rigid():
         vertices = self.vertices
         return [(vertices[i], vertices[(i + 1) % len(self.mesh.vertices)]) for i in range(len(self.vertices))]
     
+    # --------------------
     # body system properties
+    # --------------------
+    
     @property
     def pos(self):
-        return self.system.pos[self.index]
+        return glm.vec3(self.system.pos[self.index])
     
     @pos.setter
     def pos(self, value):
-        self.system.pos[self.index] = value
+        self.system.pos[self.index] = [i for i in value]
         
     @property
     def initial(self):
-        return self.system.initial[self.index]
+        return glm.vec3(self.system.initial[self.index])
     
     @initial.setter
     def initial(self, value):
-        self.system.initial[self.index] = value
+        self.system.initial[self.index] = [i for i in value]
         
     @property
     def inertial(self):
-        return self.system.inertial[self.index]
+        return glm.vec3(self.system.inertial[self.index])
     
     @inertial.setter
     def inertial(self, value):
-        self.system.inertial[self.index] = value
+        self.system.inertial[self.index] = [i for i in value]
         
     @property
     def vel(self):
-        return self.system.vel[self.index]
+        return glm.vec3(self.system.vel[self.index])
     
     @vel.setter
     def vel(self, value):
-        self.system.vel[self.index] = value
+        self.system.vel[self.index] = [i for i in value]
         
     @property
     def prev_vel(self):
-        return self.system.prev_vel[self.index]
+        return glm.vec3(self.system.prev_vel[self.index])
     
     @prev_vel.setter
     def prev_vel(self, value):
-        self.system.prev_vel[self.index] = value
+        self.system.prev_vel[self.index] = [i for i in value]
         
     @property
     def friction(self):
