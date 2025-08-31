@@ -12,6 +12,7 @@ from helper.constants import DEBUG_TIMING, PENALTY_MAX, PENALTY_MIN
 from helper.decorators import timer
 from shapes.body_system import BodySystem
 from forces.force_system import ForceSystem
+import numpy as np
 
 
 def clamp(x, lo, hi):
@@ -199,17 +200,16 @@ class Solver:
             if not current_force.initialize():
                 # force inactive this step — remove it
                 self.remove(current_force)
-                current_force = next_force
-                continue
-
-            # warmstart duals and penalties (Eq. 19)
-            for k in range(current_force.rows()):
-                current_force.lamb[k] *= self.alpha * self.gamma
-                current_force.penalty[k] = clamp(current_force.penalty[k] * self.gamma, PENALTY_MIN, PENALTY_MAX)
-                # clamp by material stiffness for non-hard constraints
-                current_force.penalty[k] = min(current_force.penalty[k], current_force.stiffness[k])
             
             current_force = next_force
+            
+        self.force_system.compact()
+
+        # warmstart forces
+        active_slice = slice(0, self.force_system.size)
+        self.force_system.lamb[active_slice] *= self.alpha * self.gamma
+        self.force_system.penalty[active_slice] = np.clip(self.force_system.penalty[active_slice] * self.gamma, PENALTY_MIN, PENALTY_MAX)
+        self.force_system.penalty[active_slice] = np.minimum(self.force_system.penalty[active_slice], self.force_system.stiffness[active_slice])
             
     # ------------------------------------
     # Initialize & warmstart all body state
@@ -217,29 +217,48 @@ class Solver:
 
     @timer('Warmstart Bodies', on=DEBUG_TIMING)     
     def warmstart_bodies(self, dt: float) -> None:
-        gravity = self.gravity.y
-
-        current_body = self.bodies
-        while current_body is not None:
-            # limit angular velocity
-            current_body.vel.z = clamp(current_body.vel.z, -10.0, 10.0)
-
-            # inertial (Eq. 2)
-            current_body.inertial = current_body.pos + current_body.vel * dt
-            if current_body.mass > 0:
-                current_body.inertial += vec3(0, gravity, 0) * (dt * dt)
-
-            # adaptive warmstart (original VBD)
-            accel = (current_body.vel - current_body.prev_vel) / dt  # vec3
-            accel_ext = accel.y * sign(gravity)
-            accel_weight = glm.clamp(accel_ext / abs(gravity), 0, 1)
-            if isinf(accel_weight): accel_weight = 0
-
-            # save x- and warmstart position
-            current_body.initial = current_body.pos
-            current_body.pos = current_body.pos + current_body.vel * dt + vec3(0, gravity, 0) * (accel_weight * dt * dt)
+        if self.body_system.size == 0:
+            return
             
-            current_body = current_body.next
+        gravity = self.gravity.y
+        
+        # Get active slice of arrays
+        active_slice = slice(0, self.body_system.size)
+        
+        # Limit angular velocity
+        self.body_system.vel[active_slice, 2] = np.clip(
+            self.body_system.vel[active_slice, 2], -10.0, 10.0
+        )
+        
+        # Inertial (Eq. 2)
+        self.body_system.inertial[active_slice] = (
+            self.body_system.pos[active_slice] + 
+            self.body_system.vel[active_slice] * dt
+        )
+        
+        # Add gravity for bodies with mass > 0
+        mass_mask = self.body_system.mass[active_slice] > 0
+        gravity_vec = np.array([0, gravity, 0], dtype='float32')
+        self.body_system.inertial[active_slice][mass_mask] += gravity_vec * (dt * dt)
+        
+        # Adaptive warmstart (original VBD)
+        accel = (self.body_system.vel[active_slice] - self.body_system.prev_vel[active_slice]) / dt
+        accel_ext = accel[:, 1] * np.sign(gravity)  # y component * sign of gravity
+        accel_weight = np.clip(accel_ext / abs(gravity), 0, 1)
+        
+        # Handle infinite values
+        accel_weight = np.where(np.isinf(accel_weight), 0, accel_weight)
+        
+        # Save initial positions
+        self.body_system.initial[active_slice] = self.body_system.pos[active_slice].copy()
+        
+        # Warmstart position
+        gravity_term = gravity_vec * (accel_weight[:, np.newaxis] * dt * dt)
+        self.body_system.pos[active_slice] = (
+            self.body_system.pos[active_slice] + 
+            self.body_system.vel[active_slice] * dt + 
+            gravity_term
+        )
             
     # ----------------
     # Velocity update (BDF1)
@@ -280,6 +299,8 @@ class Solver:
             if body_b and body_b is not body_a:
                 body_b.remove_force(value)
                 
+            self.force_system.delete(value)
+                
         elif isinstance(value, Rigid):
             # Remove from solver's body linked list
             if self.bodies is value:
@@ -292,3 +313,5 @@ class Solver:
                     current = current.next
                 if current is value and prev is not None:
                     prev.next = value.next
+                    
+            self.body_system.delete(value)

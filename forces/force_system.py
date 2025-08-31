@@ -1,5 +1,6 @@
 import numpy as np
-from helper.constants import ROWS
+from helper.constants import ROWS, DEBUG_TIMING
+from helper.decorators import timer
 
 
 class ForceSystem():
@@ -86,51 +87,78 @@ class ForceSystem():
             self.free_indices.add(index)
             self.size -= 1
             
+    @timer('Compacting Forces', on=True)
     def compact(self) -> None:
         """
-        Move active forces to the contiguous front of the arrays using an O(n) front-back swap.
+        Move active forces to the contiguous front of the arrays using vectorized operations.
+        Much faster than element-by-element swaps.
         """
-        if not self.free_indices:
+        if not self.free_indices or self.size == 0:
             return
+        
+        print(len(self.free_indices))
 
-        front = 0
-        back = self.max_forces - 1
-
-        while front < back:
-            # Move front forward to the first free slot
-            while front < back and front not in self.free_indices:
-                front += 1
-            # Move back backward to the last active slot
-            while front < back and back in self.free_indices:
-                back -= 1
-
-            if front >= back:
-                break
-
-            # Swap all attributes
-            self.J[front],        self.J[back]        = self.J[back],        self.J[front]
-            self.H[front],        self.H[back]        = self.H[back],        self.H[front]
+        # Create mapping from old indices to new indices
+        active_indices = [i for i in range(self.max_forces) if i not in self.free_indices]
+        
+        if len(active_indices) == 0:
+            return
             
-            self.C[front],        self.C[back]        = self.C[back],        self.C[front]
-            self.motor[front],    self.motor[back]    = self.motor[back],    self.motor[front]
+        # Only proceed if we actually need to move things
+        if active_indices == list(range(len(active_indices))):
+            return  # Already compact
             
-            self.stiffness[front], self.stiffness[back] = self.stiffness[back], self.stiffness[front]
-            self.fmax[front],     self.fmax[back]     = self.fmax[back],     self.fmax[front]
-            self.fmin[front],     self.fmin[back]     = self.fmin[back],     self.fmin[front]
-            self.fracture[front], self.fracture[back] = self.fracture[back], self.fracture[front]
+        # Use numpy advanced indexing to reorder arrays (vectorized)
+        self.J[:self.size] = self.J[active_indices]
+        self.H[:self.size] = self.H[active_indices]
+        
+        self.C[:self.size] = self.C[active_indices]
+        self.motor[:self.size] = self.motor[active_indices]
+        
+        self.stiffness[:self.size] = self.stiffness[active_indices]
+        self.fmax[:self.size] = self.fmax[active_indices]
+        self.fmin[:self.size] = self.fmin[active_indices]
+        self.fracture[:self.size] = self.fracture[active_indices]
+        
+        self.penalty[:self.size] = self.penalty[active_indices]
+        self.lamb[:self.size] = self.lamb[active_indices]
+
+        # Update force objects and rebuild dictionary
+        new_forces = {}
+        for new_idx, old_idx in enumerate(active_indices):
+            if old_idx in self.forces:
+                force = self.forces[old_idx]
+                force.index = new_idx
+                new_forces[new_idx] = force
+        
+        self.forces = new_forces
+
+        # Update free indices to be the tail end
+        self.free_indices = set(range(self.size, self.max_forces))
+
             
-            self.penalty[front],  self.penalty[back]  = self.penalty[back],  self.penalty[front]
-            self.lamb[front],     self.lamb[back]     = self.lamb[back],     self.lamb[front]
-
-            # Update Force objects
-            force = self.forces.pop(back)
-            force.index = front
-            self.forces[front] = force
-
-            # Update free indices
-            self.free_indices.remove(front)
-            self.free_indices.add(back)
-
-            # Move pointers
-            front += 1
-            back -= 1
+    def is_compact(self) -> bool:
+        """
+        Verify if the force system is compact (all active forces are at the front).
+        Returns True if compact, False otherwise.
+        """
+        # If no forces or all slots are used, it's automatically compact
+        if self.size == 0 or len(self.free_indices) == 0:
+            return True
+            
+        # Check that all indices from 0 to size-1 are active (not in free_indices)
+        for i in range(self.size):
+            if i in self.free_indices:
+                return False
+                
+        # Check that all indices from size to max_forces-1 are free
+        for i in range(self.size, self.max_forces):
+            if i not in self.free_indices:
+                return False
+                
+        # Verify that forces dictionary keys match the active range
+        active_indices = set(range(self.size))
+        if set(self.forces.keys()) != active_indices:
+            return False
+            
+        return True

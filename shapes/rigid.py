@@ -214,7 +214,8 @@ class Rigid():
     
     @pos.setter
     def pos(self, value):
-        self.system.pos[self.index] = [i for i in value]
+        self.update_vertices = True
+        self.system.pos[self.index][:] = value
         
     @property
     def initial(self):
@@ -222,7 +223,7 @@ class Rigid():
     
     @initial.setter
     def initial(self, value):
-        self.system.initial[self.index] = [i for i in value]
+        self.system.initial[self.index][:] = value
         
     @property
     def inertial(self):
@@ -230,7 +231,7 @@ class Rigid():
     
     @inertial.setter
     def inertial(self, value):
-        self.system.inertial[self.index] = [i for i in value]
+        self.system.inertial[self.index][:] = value
         
     @property
     def vel(self):
@@ -238,7 +239,7 @@ class Rigid():
     
     @vel.setter
     def vel(self, value):
-        self.system.vel[self.index] = [i for i in value]
+        self.system.vel[self.index][:] = value
         
     @property
     def prev_vel(self):
@@ -246,7 +247,7 @@ class Rigid():
     
     @prev_vel.setter
     def prev_vel(self, value):
-        self.system.prev_vel[self.index] = [i for i in value]
+        self.system.prev_vel[self.index][:] = value
         
     @property
     def friction(self):
