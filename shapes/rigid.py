@@ -192,12 +192,12 @@ class Rigid():
     @property
     def vertices(self) -> list[vec2]:
         # lazy check
-        if not self.update_vertices:
-            return self._vertices
+        # if not self.update_vertices:
+        #     return self._vertices
         
         self._vertices = [transform(self.pos, self.scale, v) for v in self.mesh.vertices]
         self.update_vertices = False
-        return self.vertices
+        return self._vertices
     
     @property
     def edges(self) -> list[tuple[vec2, vec2]]:

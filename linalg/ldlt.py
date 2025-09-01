@@ -1,7 +1,6 @@
 import numpy as np
 import numba as nb
 
-@nb.njit(parallel=True, fastmath=True)
 def solve(lhs: np.ndarray, rhs: np.ndarray) -> np.ndarray:
     N = lhs.shape[0]
     out = np.empty((N, 3), dtype=lhs.dtype)

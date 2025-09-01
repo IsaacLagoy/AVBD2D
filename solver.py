@@ -77,12 +77,16 @@ class Solver:
             color.reserve_space()
             
         inv_dt2 = 1 / (dt * dt)
+        print('inv_dt2:', inv_dt2, dt)
         
         # main solver loop
         for iteration in range(self.iterations):
             
             # primal update
             for color in self.colors:
+                if color.count == 0:
+                    continue
+                
                 # build lhs
                 color.lhs[:, 0, 0] = self.body_system.mass[color.indices]
                 color.lhs[:, 1, 1] = self.body_system.mass[color.indices]  
@@ -126,28 +130,30 @@ class Solver:
                         
                 self.body_system.pos[color.indices] -= solve(color.lhs, color.rhs)
                 
-                # dual update
-                for force in self.get_forces_iterator():
-                    force.computeConstraint(self.alpha)
+            # --------------------
+            # Dual update
+            # --------------------
                 
-                # Eq. 11 (do not include motors in dual update)
-                self.force_system.lamb = np.clip(self.force_system.penalty * self.force_system.C + np.where(np.isinf(self.force_system.stiffness), self.force_system.lamb, 0.0), self.force_system.fmin, self.force_system.fmax)
-                
-                # fracture
-                mask = np.any(np.abs(self.force_system.lamb) >= self.force_system.fracture, axis=1)
-                self.force_system.stiffness[mask, :] = 0
-                self.force_system.penalty[mask, :]   = 0
-                self.force_system.lamb[mask, :]      = 0
+            for force in self.get_forces_iterator():
+                force.computeConstraint(self.alpha)
+            
+            # Eq. 11 (do not include motors in dual update)
+            self.force_system.lamb = np.clip(self.force_system.penalty * self.force_system.C + np.where(np.isinf(self.force_system.stiffness), self.force_system.lamb, 0.0), self.force_system.fmin, self.force_system.fmax)
+            
+            # fracture
+            mask = np.any(np.abs(self.force_system.lamb) >= self.force_system.fracture, axis=1)
+            self.force_system.stiffness[mask, :] = 0
+            self.force_system.penalty[mask, :]   = 0
+            self.force_system.lamb[mask, :]      = 0
 
-                # Eq. 16 — increment penalty within bounds if within force limits
-                mask = (self.force_system.lamb > self.force_system.fmin) & (self.force_system.lamb < self.force_system.fmax)
-                self.force_system.penalty = np.where(
-                    mask,
-                    np.minimum(self.force_system.penalty + self.beta * np.abs(self.force_system.C),
-                            np.minimum(PENALTY_MAX, self.force_system.stiffness)),
-                    self.force_system.penalty
-                )
-
+            # Eq. 16 — increment penalty within bounds if within force limits
+            mask = (self.force_system.lamb > self.force_system.fmin) & (self.force_system.lamb < self.force_system.fmax)
+            self.force_system.penalty = np.where(
+                mask,
+                np.minimum(self.force_system.penalty + self.beta * np.abs(self.force_system.C),
+                        np.minimum(PENALTY_MAX, self.force_system.stiffness)),
+                self.force_system.penalty
+            )
 
         self.update_velocities(dt)
             

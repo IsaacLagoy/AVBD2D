@@ -30,8 +30,8 @@ class Color():
         """
         Allocates the necessary amount of space for completing all solver operations
         """
-        self.rhs = np.zeros((self.count, 3), dtype='float32')
-        self.lhs = np.zeros((self.count, 3, 3), dtype='float32')
+        self.rhs = np.zeros((self.count, 3), dtype='float64')
+        self.lhs = np.zeros((self.count, 3, 3), dtype='float64')
     
     # --------------------
     # Iterators

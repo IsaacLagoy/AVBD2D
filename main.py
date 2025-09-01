@@ -86,7 +86,7 @@ def main():
                 rigid.color = get_color(rigid.graph_color, chromatic_number)
             
         # step physics
-        solver.step(max(dt, 1e-8))
+        solver.step(max(dt, 1e-4))
         
         # draw
         screen.fill((30, 30, 30))
