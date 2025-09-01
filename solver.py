@@ -79,29 +79,50 @@ class Solver:
         inv_dt2 = 1 / (dt * dt)
         
         # main solver loop
-        for iteration in self.iterations:
+        for iteration in range(self.iterations):
             
             # primal update
             for color in self.colors:
                 # build lhs
-                color.lhs[color.indices, 0, 0] = self.body_system.mass[color.indices]
-                color.lhs[color.indices, 1, 1] = self.body_system.mass[color.indices]
-                color.lhs[color.indices, 2, 2] = self.body_system.moment[color.indices]
+                color.lhs[:, 0, 0] = self.body_system.mass[color.indices]
+                color.lhs[:, 1, 1] = self.body_system.mass[color.indices]  
+                color.lhs[:, 2, 2] = self.body_system.moment[color.indices]
                 
                 color.lhs *= inv_dt2
                 
                 # build rhs
-                color.rhs = color.lhs * (self.body_system.pos[color.indices] - self.body_system.inertial[color.indices])
+                color.rhs = np.einsum('bij,bj->bi', color.lhs, self.body_system.pos[color.indices] - self.body_system.inertial[color.indices])
                 
                 # find forces
                 for i, body in enumerate(color.get_bodies_iterator()):
+                    body_idx_in_color = i
+                    
                     for force in body.get_forces_iterator():
 
                         # compute constraint & derivatives
                         force.computeConstraint(self.alpha)
                         force.computeDerivatives(body)
                         
-                        # TODO add remain primal update
+                        # Vectorized accumulation for this force's contribution
+                        for r in range(force.rows()):
+                            lam = force.lamb[r] if isinf(force.stiffness[r]) else 0
+                            f = clamp(force.penalty[r] * force.C[r] + lam + force.motor[r],
+                                    force.fmin[r], force.fmax[r])
+                            
+                            # Geometric stiffness
+                            Hc0, Hc1, Hc2 = force.H[r][0], force.H[r][1], force.H[r][2]
+                            G_diag = [glm.length(Hc0), glm.length(Hc1), glm.length(Hc2)]
+                            G_scaled = [g * abs(f) for g in G_diag]
+                            
+                            # Accumulate into vectorized arrays
+                            J = force.J[r]  # vec3
+                            color.rhs[body_idx_in_color] += J * f
+                            
+                            # Add outer product and geometric stiffness
+                            for j in range(3):
+                                for k in range(3):
+                                    color.lhs[body_idx_in_color, j, k] += J[j] * J[k] * force.penalty[r]
+                                color.lhs[body_idx_in_color, j, j] += G_scaled[j]
                         
                 self.body_system.pos[color.indices] -= solve(color.lhs, color.rhs)
                 
