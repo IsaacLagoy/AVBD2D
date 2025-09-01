@@ -1,9 +1,8 @@
 from helper.maths import inside, segment_intersect
 from shapes.rigid import Rigid
-from glm import vec2
 
 
-def sutherland_hodgmen(subject: Rigid, clip: Rigid) -> list[vec2]:
+def sutherland_hodgman(subject: Rigid, clip: Rigid):
     output_list = subject.vertices
     
     for clip_start, clip_end in clip.edges:

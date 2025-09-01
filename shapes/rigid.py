@@ -1,18 +1,17 @@
-import glm
-from glm import vec2, vec3
-from helper.maths import transform
 from shapes.mesh import Mesh
 from shapes.body_system import BodySystem
 import pygame
+import numpy as np
+from helper.maths import rotate, transform
 
 
 class Rigid():
     
-    def __init__(self, system: BodySystem, mesh: Mesh, pos: vec3, scale: vec2, vel: vec3=None, friction: float=0.8, density: float=1, color: vec3=None) -> None:
+    def __init__(self, system: BodySystem, mesh: Mesh, pos: tuple, scale: tuple, vel: tuple=None, friction: float=0.8, density: float=1, color: tuple=None) -> None:
         self.system = system
         
         # default parameter values
-        vel = vel if vel is not None else vec3()
+        vel = vel if vel else np.zeros(3)
         
         # add self to solver linked list
         self.next = self.solver.bodies
@@ -20,14 +19,14 @@ class Rigid():
         
         self.mesh = mesh
         self.scale = scale
-        self.color = color if color is not None else vec3(0.5)
+        self.color = color if color is not None else [0.5, 0.5, 0.5]
         
         # compute mass and moment TODO this is only correct for the basic cube mesh
         mass = scale[0] * scale[1] * density
-        moment = mass * glm.dot(scale, scale) / 12
+        moment = mass * np.dot(scale, scale) / 12
         
         # broad collision
-        self.radius = glm.length(scale)
+        self.radius = np.linalg.norm(scale)
         
         # add self to body system
         self.index = self.system.insert(pos, vel, friction, mass, moment)
@@ -179,6 +178,12 @@ class Rigid():
             to_update.append(adjacent_body)
             
         return to_update
+    
+    def project_vertices(self, dir):
+        dir = rotate(-self.pos[2], dir)
+        dir /= self.scale
+        
+        return np.dot(self.vertices, dir)
         
     # --------------------
     # Properties
@@ -190,19 +195,14 @@ class Rigid():
         return self.system.solver
     
     @property
-    def vertices(self) -> list[vec2]:
-        # lazy check
-        # if not self.update_vertices:
-        #     return self._vertices
-        
-        self._vertices = [transform(self.pos, self.scale, v) for v in self.mesh.vertices]
-        self.update_vertices = False
-        return self._vertices
+    def vertices(self):
+        return [transform(self.pos, self.scale, v) for v in self.mesh.vertices]
     
     @property
-    def edges(self) -> list[tuple[vec2, vec2]]:
-        vertices = self.vertices
-        return [(vertices[i], vertices[(i + 1) % len(self.mesh.vertices)]) for i in range(len(self.vertices))]
+    def edges(self):
+        verts = self.vertices
+        l = len(verts)
+        return [(verts[i], verts[(i + 1) % l]) for i in range(l)]
     
     # --------------------
     # body system properties

@@ -1,42 +1,40 @@
-import glm
-from glm import vec3, vec2
 from shapes.rigid import Rigid
-from helper.maths import inverse_transform
-from collision.sutherland_hodgman import sutherland_hodgmen
 import numpy as np
+from collision.sutherland_hodgman import sutherland_hodgman
+from helper.maths import inverse_transform
 
 
-def axes(body: Rigid) -> list[vec3]:
+def axes(body: Rigid):
     mesh = body.vertices
+    num_verts = len(mesh)
     seps = []
-    for i in range(4):
-        edge = glm.normalize(mesh[(i + 1) % len(mesh)] - mesh[i])
-        seps.append((vec2(edge.y, -edge.x), mesh[i], mesh[(i + 1) % len(body.mesh.vertices)]))
+    
+    for i in range(num_verts):
+        edge = mesh[(i + 1) % num_verts] - mesh[i]
+        denom = np.linalg.norm(edge)
+        edge /= denom
+        
+        seps.append(np.array([edge[1], -edge[0]], dtype='float32'))
+        
     return seps
 
-
-def project(body: Rigid, axis: vec2) -> tuple[float, float]:
+def project(body: Rigid, axis):
     """
     Projects a rigid body's mesh onto a given axis and returns the min and max scalar values.
     """
-    transformed_mesh = body.vertices
-    
-    # Initialize min and max with the projection of the first vertex
-    projection_values = [glm.dot(v, axis) for v in transformed_mesh]
-    
-    min_projection = min(projection_values)
-    max_projection = max(projection_values)
-    
-    return min_projection, max_projection
+    # TODO get real world location of vertices
+    projs = np.dot(body.vertices, axis)
+    min_proj = np.min(projs)
+    max_proj = np.max(projs)
+    return min_proj, max_proj
 
-
-def sat(body_a: Rigid, body_b: Rigid) -> vec2 | None:
+def sat(body_a: Rigid, body_b: Rigid):
     axs = axes(body_a)
-    
+   
     min_overlap = float('inf')
     min_axis = None
     
-    for (axis, e1, e2) in axs:
+    for axis in axs:
         proj_a_min, proj_a_max = project(body_a, axis)
         proj_b_min, proj_b_max = project(body_b, axis)
         
@@ -45,7 +43,7 @@ def sat(body_a: Rigid, body_b: Rigid) -> vec2 | None:
         if proj_a_min < proj_b_max and proj_a_max > proj_b_min:
             overlap = min(proj_a_max, proj_b_max) - max(proj_a_min, proj_b_min)
             assert overlap >= 0, 'Overlap is negative'
-            if glm.dot(body_b.xy - body_a.xy, axis) < 0:
+            if np.dot(body_b.pos[:2] - body_a.pos[:2], axis) < 0:
                 overlap *= -1
         else:
             return None
@@ -63,8 +61,11 @@ def sat(body_a: Rigid, body_b: Rigid) -> vec2 | None:
 
     return None
 
-
-def collide(body_a: Rigid, body_b: Rigid, contacts) -> bool:
+def collide(manifold) -> bool:
+    # easy access variables
+    body_a = manifold.body_a
+    body_b = manifold.body_b
+    
     pen_a = sat(body_a, body_b) # a has minimum axis
     pen_b = sat(body_b, body_a) # b has minimum axis
     
@@ -75,49 +76,49 @@ def collide(body_a: Rigid, body_b: Rigid, contacts) -> bool:
     is_a = False
     if pen_b is None:
         is_a = True
-        depth = glm.length(pen_a)
-        normal = glm.normalize(pen_a)
+        depth = np.linalg.norm(pen_a)
+        normal = pen_a / depth
         
     elif pen_a is None:
         is_a = False
-        depth = glm.length(pen_b)
-        normal = glm.normalize(pen_b)
+        depth = np.linalg.norm(pen_b)
+        normal = pen_b / depth
         
     else:
-        ag = glm.length2(pen_a) < glm.length2(pen_b)
-        normal = glm.normalize(pen_a) if ag else glm.normalize(pen_b)
-        depth = glm.length(pen_a) if ag else glm.length(pen_b)
+        ag = np.dot(pen_a, pen_a) < np.dot(pen_b, pen_b)
+        depth = np.linalg.norm(pen_a) if ag else np.linalg.norm(pen_b)
+        normal = pen_a / depth if ag else pen_b / depth
+        
         is_a = ag
     
-    clipped = sutherland_hodgmen(body_b, body_a) if is_a else sutherland_hodgmen(body_a, body_b)
+    clipped = sutherland_hodgman(body_b, body_a) if is_a else sutherland_hodgman(body_a, body_b)
     
     if not len(clipped):
         return 0
     
     margin = depth * 0.02
-    c_normal = normal if glm.dot(body_a.xy - body_b.xy, normal) < 0 else -normal
+    c_normal = normal if np.dot(body_a.pos[:2] - body_b.pos[:2], normal) < 0 else -normal
     
-    clipped.sort(key=lambda c: glm.dot(c, c_normal))
+    clipped.sort(key=lambda c: np.dot(c, c_normal))
 
     # project points and find the closest
     rA = clipped[-1]
     rB = clipped[0]
     
-    contacts[0].normal = -c_normal
-    contacts[0].rA = inverse_transform(body_a.pos, body_a.scale, rA)
-    contacts[0].rB = inverse_transform(body_b.pos, body_b.scale, rB)
+    manifold.normal[0] = -c_normal
+    manifold.rA[0] = inverse_transform(body_a.pos, body_a.scale, rA)
+    manifold.rB[0] = inverse_transform(body_b.pos, body_b.scale, rB)
     
-    rA2 = clipped[-2] if glm.dot(clipped[-2], c_normal) > glm.dot(clipped[-1], c_normal) - margin else rA
-    rB2 = clipped[1] if glm.dot(clipped[1], c_normal) < glm.dot(clipped[0], c_normal) + margin else rB
+    rA2 = clipped[-2] if np.dot(clipped[-2], c_normal) > np.dot(clipped[-1], c_normal) - margin else rA
+    rB2 = clipped[1] if np.dot(clipped[1], c_normal) < np.dot(clipped[0], c_normal) + margin else rB
     
     # check if there is only on unique contact point
-    if (np.allclose(rA2, rA) and np.allclose(rB2, rB)) or \
-       (np.allclose(rB2, rA) or np.allclose(rA2, rB)):
-
+    # TODO this is going to throw errors
+    if (np.allclose(rA2, rA) and np.allclose(rB2, rB)) or (np.allclose(rB2, rA) or np.allclose(rA2, rB)):
         return 1
     
-    contacts[1].normal = -c_normal
-    contacts[1].rA = inverse_transform(body_a.pos, body_a.scale, rA2)
-    contacts[1].rB = inverse_transform(body_b.pos, body_b.scale, rB2)
+    manifold.normal[1] = -c_normal
+    manifold.rA[1] = inverse_transform(body_a.pos, body_a.scale, rA2)
+    manifold.rB[1] = inverse_transform(body_b.pos, body_b.scale, rB2)
     
     return 2

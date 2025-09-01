@@ -2,12 +2,12 @@ import pygame
 from pygame.locals import QUIT
 from shapes.rigid import Rigid
 from solver import Solver
-from glm import vec2, vec3
 from random import uniform
 from shapes.mesh import Mesh
 from helper.constants import DRAW_FORCE
 from graph.dsatur import dsatur_coloring
 from graph.visuals import get_color
+from glm import vec2, vec3
 
 
 BODIES = 50

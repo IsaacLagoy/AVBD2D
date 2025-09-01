@@ -1,54 +1,20 @@
-import glm
-from glm import vec2, vec3
+import numpy as np
 
+def rotate_scale(angle: float, scale, v):
+    s = scale * v
+    return rotate(angle, s)
 
-def cross(a: vec2, b: vec2) -> float:
-    return a.x * b.y - a.y * b.x
+def rotate(angle, v):
+    c, s = np.cos(angle), np.sin(angle)
+    return np.array([c * v[0] - s * v[1], s * v[0] + c * v[1]], dtype='float32')
 
-def rotate(angle: float, v: vec2) -> vec2:
-    """Rotate vec2 v by angle (in radians)."""
-    c, s = glm.cos(angle), glm.sin(angle)
-    return vec2(c * v.x - s * v.y, s * v.x + c * v.y)
+def cross(a, b) -> float:
+    return a[0] * b[1] - a[1] * b[0]
 
-def rotate_scale(angle: float, scale: vec2, v: vec2) -> vec2:
-    """Scale vec2 v by scale, then rotate by angle (in radians)."""
-    # Apply scaling first
-    sx, sy = scale.x * v.x, scale.y * v.y
-    
-    # Apply rotation
-    c, s = glm.cos(angle), glm.sin(angle)
-    return vec2(c * sx - s * sy, s * sx + c * sy)
+def inside(p, a, b) -> bool:
+    return cross(b - a, p - a) >= 0
 
-def transform(pos: vec3, sca: vec2, r: vec2) -> vec2:
-    scaled_r = r * sca
-    rotated_r = rotate(pos[2], scaled_r)
-    return vec2(pos[0], pos[1]) + rotated_r
-
-def inverse_transform(pos: vec3, sca: vec2, p: vec2) -> vec2:
-    local = p - vec2(pos[0], pos[1])
-    local = rotate(-pos[2], local)
-    local = vec2(local.x / sca.x, local.y / sca.y)
-
-    return local
-
-def sign(i: float) -> int:
-    return 2 * (i >= 0) - 1
-
-def closest_point_on_segment(a: vec2, b: vec2, p: vec2) -> vec2:
-    ab = b - a
-    ap = p - a
-    
-    ab2 = glm.dot(ab, ab)
-    if ab2 < 1e-8:
-        return a
-    
-    t = glm.dot(ap, ab)
-    
-    if t < 0: return a
-    if t > 1: return b
-    return a + t * ab
-
-def segment_intersect(p1: vec2, p2: vec2, q1: vec2, q2: vec2) -> vec2 | None:
+def segment_intersect(p1, p2, q1, q2):
     d1 = p2 - p1
     d2 = q2 - q1
     
@@ -59,5 +25,14 @@ def segment_intersect(p1: vec2, p2: vec2, q1: vec2, q2: vec2) -> vec2 | None:
     t = cross(q1 - p1, d2) / denom
     return p1 + t * d1
 
-def inside(p: vec2, a: vec2, b: vec2) -> bool:
-    return cross(b - a, p - a) >= 0
+def inverse_transform(pos, sca, p):
+    local = p - np.array([pos[0], pos[1]], dtype='float32')
+    local = rotate(-pos[2], local)
+    local /= sca
+
+    return local
+
+def transform(pos, sca, r):
+    scaled_r = r * sca
+    rotated_r = rotate(pos[2], scaled_r)
+    return pos[:2] + rotated_r

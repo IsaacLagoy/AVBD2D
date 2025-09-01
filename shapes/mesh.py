@@ -1,12 +1,12 @@
-from glm import vec2
+import numpy as np
 
 
 class Mesh():
     
-    def __init__(self, vertices: list[vec2]) -> None:
-        # vertices must be wrapped counter clockwise
+    def __init__(self, vertices) -> None:
+        # vertices must be wound counter clockwise
         self.vertices = vertices
         
     @property
-    def edges(self) -> list[tuple[vec2, vec2]]:
-        return [(self.vertices[i], self.vertices[(i + 1) % len(self.vertices)]) for i in range(len(self.vertices))]
+    def edges(self):
+        pass # TODO

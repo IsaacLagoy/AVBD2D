@@ -1,6 +1,4 @@
 # solver.py
-import glm
-from glm import vec2, mat3x3, mat3
 from math import isinf
 from shapes.rigid import Rigid
 from forces.force import Force
@@ -30,7 +28,7 @@ class Solver:
         self.alpha = 0.99
         self.gamma = 0.99
 
-        self.gravity: vec2 = vec2(0.0, -10.0)
+        self.gravity = np.array([0, -10], dtype='float32')
 
         # scene - linked list heads
         self.bodies: Rigid = None
@@ -96,98 +94,8 @@ class Solver:
                 color.lhs *= inv_dt2
 
                 color.rhs = np.einsum('bij,bj->bi', color.lhs, self.body_system.pos[color.indices] - self.body_system.inertial[color.indices])
-                
-                sum_time = 0
-                
-                for i, current_body in enumerate(color.get_bodies_iterator()):
-                    if current_body.mass <= 0:
-                        current_body = current_body.next
-                        continue
-
-                    # LHS/RHS (Eqs. 5,6)
-                    M = diag3(current_body.mass, current_body.mass, current_body.moment)
-                    inv_dt2 = 1.0 / (dt * dt)
-
-                    lhs = M * inv_dt2                          # (3,3)
-                    rhs = (M * inv_dt2) @ (current_body.pos - current_body.inertial)
-
-                    # iterate forces acting on this body
-                    for force in current_body.get_forces_iterator():
-                        
-                        t0 = time.perf_counter()
-
-                        # compute constraint & derivatives
-                        force.computeConstraint(self.alpha)
-                        force.computeDerivatives(current_body)
-                        
-                        sum_time += time.perf_counter() - t0
-
-                        for r in range(force.rows()):
-                            # lambda=0 if not a hard constraint
-                            lam = force.lamb[r] if np.isinf(force.stiffness[r]) else 0.0
-
-                            # clamped force magnitude
-                            f = np.clip(force.penalty[r] * force.C[r] + lam + force.motor[r],
-                                        force.fmin[r], force.fmax[r])
-
-                            # diagonally lumped geometric stiffness G
-                            H = force.H[r]        # assume shape (3,3) numpy
-                            Hc0, Hc1, Hc2 = H[:,0], H[:,1], H[:,2]   # columns
-                            G = np.diag([np.linalg.norm(Hc0),
-                                        np.linalg.norm(Hc1),
-                                        np.linalg.norm(Hc2)]) * abs(f)
-
-                            # accumulate
-                            J = force.J[r]    # shape (3,)
-                            rhs += J * f
-                            lhs += np.outer(J, J * force.penalty[r]) + G
-
-                    # Solve SPD system and apply update (Eq. 4)
-                    # lhs is (3,3), rhs is (3,)
-                    lhs_batched = lhs[None, :, :]   # shape (1,3,3)
-                    rhs_batched = rhs[None, :]      # shape (1,3)
-
-                    delta = solve(lhs_batched, rhs_batched)[0]  # take back out of batch
-
-                    current_body.pos -= delta
-                    
-                print(f'Sum Time: {sum_time * 1000:.3f}ms')
-                
-                # body_map = {}
-                
-                # # find forces
-                # for i, body in enumerate(color.get_bodies_iterator()):
-                #     body_map[i] = []
-                    
-                #     for force in body.get_forces_iterator():
-
-                #         # compute constraint & derivatives
-                #         force.computeConstraint(self.alpha)
-                #         force.computeDerivatives(body)
-                        
-                #         body_map[i].append(force.index)
-                        
-                #         for r in range(force.rows()):
-                #             # lambda=0 if not a hard constraint
-                #             lam = force.lamb[r] if isinf(force.stiffness[r]) else 0
-
-                #             # clamped force magnitude (Sec 3.2)
-                #             f = clamp(force.penalty[r] * force.C[r] + lam + force.motor[r],
-                #                         force.fmin[r], force.fmax[r])
-
-                #             # diagonally lumped geometric stiffness G (Sec 3.5)
-                #             # PyGLM mat3 is column-major; mat[0], mat[1], mat[2] are vec3 columns
-                #             Hc0 = force.H[r][0] # vec3
-                #             Hc1 = force.H[r][1]
-                #             Hc2 = force.H[r][2]
-                #             G = diag3(glm.length(Hc0), glm.length(Hc1), glm.length(Hc2)) * abs(f)
-
-                #             # accumulate (Eq. 13,17)
-                #             J = force.J[r]
-                #             color.rhs[i] += J * f
-                #             color.lhs[i] += glm.outerProduct(J, J * force.penalty[r]) + G
-                        
-                # self.body_system.pos[color.indices] -= solve(color.lhs, color.rhs)
+        
+                # TODO primal update each body in the color
                 
             print(f'Primal Update: {(time.perf_counter() - start_primal) * 1000:.3f}ms')
                 
@@ -236,13 +144,18 @@ class Solver:
         # Convert linked list to list for easier iteration
         bodies_list = list(self.get_bodies_iterator())
         
+        count = 0
+        
         for i, A in enumerate(bodies_list):
             for B in bodies_list[i + 1:]:
                 dp = (A.xy - B.xy)  # vec2
                 r = A.radius + B.radius
-                if glm.dot(dp, dp) <= r * r and not A.is_constrained_to(B):
+                if np.dot(dp, dp) <= r * r and not A.is_constrained_to(B):
                     # Create new manifold force - it will add itself to the linked lists
                     Manifold(self.force_system, A, B)
+                    count += 1
+                    
+        print(count)
                     
     # ------------------------------------
     # Force Warmstart and Narrow Collision
@@ -261,6 +174,8 @@ class Solver:
             current_force = next_force
             
         self.force_system.compact()
+        
+        print(len(self.force_system.forces))
 
         # warmstart forces
         active_slice = slice(0, self.force_system.size)
@@ -277,7 +192,7 @@ class Solver:
         if self.body_system.size == 0:
             return
             
-        gravity = self.gravity.y
+        gravity = self.gravity[1]
         
         # Get active slice of arrays
         active_slice = slice(0, self.body_system.size)
