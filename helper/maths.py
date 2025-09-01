@@ -19,7 +19,6 @@ def rotate_scale(angle: float, scale: vec2, v: vec2) -> vec2:
     c, s = glm.cos(angle), glm.sin(angle)
     return vec2(c * sx - s * sy, s * sx + c * sy)
 
-
 def transform(pos: vec3, sca: vec2, r: vec2) -> vec2:
     scaled_r = r * sca
     rotated_r = rotate(pos.z, scaled_r)

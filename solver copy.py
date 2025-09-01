@@ -73,59 +73,98 @@ class Solver:
         # color rigid bodies
         self.colors = dsatur_coloring(self)
 
-        for color in self.colors:
-            color.reserve_space()
+        # --------------------
+        # Main solver iterations
+        # --------------------
+        solver_start = time.perf_counter()
+        for iteration in range(self.iterations):
+            iteration_start = time.perf_counter()
             
-        inv_dt2 = 1 / (dt * dt)
-        
-        # main solver loop
-        for iteration in self.iterations:
-            
-            # primal update
-            for color in self.colors:
-                # build lhs
-                color.lhs[color.indices, 0, 0] = self.body_system.mass[color.indices]
-                color.lhs[color.indices, 1, 1] = self.body_system.mass[color.indices]
-                color.lhs[color.indices, 2, 2] = self.body_system.moment[color.indices]
-                
-                color.lhs *= inv_dt2
-                
-                # build rhs
-                color.rhs = color.lhs * (self.body_system.pos[color.indices] - self.body_system.inertial[color.indices])
-                
-                # find forces
-                for i, body in enumerate(color.get_bodies_iterator()):
-                    for force in body.get_forces_iterator():
+            # ---- Primal update ----
+            primal_start = time.perf_counter()
+            current_body = self.bodies
+            while current_body is not None:
+                if current_body.mass <= 0:
+                    current_body = current_body.next
+                    continue
 
-                        # compute constraint & derivatives
-                        force.computeConstraint(self.alpha)
-                        force.computeDerivatives(body)
-                        
-                        # TODO add remain primal update
-                        
-                self.body_system.pos[color.indices] -= solve(color.lhs, color.rhs)
-                
-                # dual update
-                for force in self.get_forces_iterator():
+                # LHS/RHS (Eqs. 5,6)
+                M = diag3(current_body.mass, current_body.mass, current_body.moment)
+                inv_dt2 = 1.0 / (dt * dt)
+                lhs = M * inv_dt2
+                rhs = (M * inv_dt2) * (current_body.pos - current_body.inertial)
+
+                # iterate forces acting on this body
+                for force in current_body.get_forces_iterator():
+
+                    # compute constraint & derivatives
                     force.computeConstraint(self.alpha)
-                
-                # Eq. 11 (do not include motors in dual update)
-                self.force_system.lamb = np.clip(self.force_system.penalty * self.force_system.C + np.where(np.isinf(self.force_system.stiffness), self.force_system.lamb, 0.0), self.force_system.fmin, self.force_system.fmax)
-                
-                # fracture
-                mask = np.any(np.abs(self.force_system.lamb) >= self.force_system.fracture, axis=1)
-                self.force_system.stiffness[mask, :] = 0
-                self.force_system.penalty[mask, :]   = 0
-                self.force_system.lamb[mask, :]      = 0
+                    force.computeDerivatives(current_body)
 
-                # Eq. 16 — increment penalty within bounds if within force limits
-                mask = (self.force_system.lamb > self.force_system.fmin) & (self.force_system.lamb < self.force_system.fmax)
-                self.force_system.penalty = np.where(
-                    mask,
-                    np.minimum(self.force_system.penalty + self.beta * np.abs(self.force_system.C),
-                            np.minimum(PENALTY_MAX, self.force_system.stiffness)),
-                    self.force_system.penalty
-                )
+                    for r in range(force.rows()):
+                        # lambda=0 if not a hard constraint
+                        lam = force.lamb[r] if isinf(force.stiffness[r]) else 0
+
+                        # clamped force magnitude (Sec 3.2)
+                        f = clamp(force.penalty[r] * force.C[r] + lam + force.motor[r],
+                                     force.fmin[r], force.fmax[r])
+
+                        # diagonally lumped geometric stiffness G (Sec 3.5)
+                        # PyGLM mat3 is column-major; mat[0], mat[1], mat[2] are vec3 columns
+                        Hc0 = force.H[r][0] # vec3
+                        Hc1 = force.H[r][1]
+                        Hc2 = force.H[r][2]
+                        G = diag3(glm.length(Hc0), glm.length(Hc1), glm.length(Hc2)) * abs(f)
+
+                        # accumulate (Eq. 13,17)
+                        J = force.J[r]
+                        rhs += J * f
+                        lhs += glm.outerProduct(J, J * force.penalty[r]) + G
+
+                # Solve SPD system and apply update (Eq. 4)
+                delta = solve(lhs, rhs)
+                current_body.pos -= delta
+                
+                current_body = current_body.next
+            
+            primal_time = time.perf_counter() - primal_start
+
+            # ---- Dual update ----
+            dual_start = time.perf_counter()
+            current_force = self.forces
+            while current_force is not None:
+
+                current_force.computeConstraint(self.alpha)
+
+                for r in range(current_force.rows()):
+                    lam = current_force.lamb[r] if isinf(current_force.stiffness[r]) else 0
+
+                    # Eq. 11 (do not include motors in dual update)
+                    current_force.lamb[r] = clamp(current_force.penalty[r] * current_force.C[r] + lam,
+                                          current_force.fmin[r], current_force.fmax[r])
+
+                    # fracture
+                    if abs(current_force.lamb[r]) >= current_force.fracture[r]:
+                        current_force.disable()
+
+                    # Eq. 16 — increment penalty within bounds if within force limits
+                    if current_force.lamb[r] > current_force.fmin[r] and current_force.lamb[r] < current_force.fmax[r]:
+                        current_force.penalty[r] = min(
+                            current_force.penalty[r] + self.beta * abs(current_force.C[r]),
+                            min(PENALTY_MAX, current_force.stiffness[r])
+                        )
+                
+                current_force = current_force.next
+            
+            dual_time = time.perf_counter() - dual_start
+            iteration_time = time.perf_counter() - iteration_start
+            
+            if DEBUG_TIMING:
+                print(f"  Iteration {iteration+1}: Primal {primal_time*1000:.3f}ms, Dual {dual_time*1000:.3f}ms, Total {iteration_time*1000:.3f}ms")
+        
+        solver_time = time.perf_counter() - solver_start
+        if DEBUG_TIMING:
+            print(f"Main solver iterations ({self.iterations} iterations): {solver_time*1000:.3f}ms")
 
 
         self.update_velocities(dt)

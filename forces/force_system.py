@@ -87,7 +87,7 @@ class ForceSystem():
             self.free_indices.add(index)
             self.size -= 1
             
-    @timer('Compacting Forces', on=True)
+    @timer('Compacting Forces', on=DEBUG_TIMING)
     def compact(self) -> None:
         """
         Move active forces to the contiguous front of the arrays using vectorized operations.
@@ -95,8 +95,6 @@ class ForceSystem():
         """
         if not self.free_indices or self.size == 0:
             return
-        
-        print(len(self.free_indices))
 
         # Create mapping from old indices to new indices
         active_indices = [i for i in range(self.max_forces) if i not in self.free_indices]

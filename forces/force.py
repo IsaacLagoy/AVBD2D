@@ -65,11 +65,6 @@ class Force():
     def initialize(self) -> bool: return False
     def computeConstraint(self, alpha: float) -> None: ...
     def computeDerivatives(self, rigid: Rigid) -> None: ...
-
-    def disable(self) -> None:
-        self.stiffness = [0 for _ in range(ROWS)]
-        self.penalty = [0 for _ in range(ROWS)]
-        self.lamb = [0 for _ in range(ROWS)]
             
     # prints debug information about the force
     def __repr__(self) -> str:
