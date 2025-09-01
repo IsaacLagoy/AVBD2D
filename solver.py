@@ -12,6 +12,7 @@ from forces.force_system import ForceSystem
 import numpy as np
 import numba as nb
 from graph.dsatur import dsatur_coloring
+from forces.manifold import Manifold
 
 
 def clamp(x, lo, hi):
@@ -145,6 +146,7 @@ class Solver:
         bodies_list = list(self.get_bodies_iterator())
         
         count = 0
+        st = 0
         
         for i, A in enumerate(bodies_list):
             for B in bodies_list[i + 1:]:
@@ -152,10 +154,13 @@ class Solver:
                 r = A.radius + B.radius
                 if np.dot(dp, dp) <= r * r and not A.is_constrained_to(B):
                     # Create new manifold force - it will add itself to the linked lists
+                    s = time.perf_counter()
                     Manifold(self.force_system, A, B)
+                    st += time.perf_counter() - s
                     count += 1
                     
         print(count)
+        print(f'Total Manifold Init: {st * 1000:.3f}ms')
                     
     # ------------------------------------
     # Force Warmstart and Narrow Collision
@@ -272,6 +277,9 @@ class Solver:
                 body_b.remove_force(value)
                 
             self.force_system.delete(value.index)
+            
+            if isinstance(value, Manifold):
+                self.force_system.contacts.delete(value.contact_index)
                 
         elif isinstance(value, Rigid):
             # Remove from solver's body linked list
