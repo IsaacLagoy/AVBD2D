@@ -21,12 +21,12 @@ def rotate_scale(angle: float, scale: vec2, v: vec2) -> vec2:
 
 def transform(pos: vec3, sca: vec2, r: vec2) -> vec2:
     scaled_r = r * sca
-    rotated_r = rotate(pos.z, scaled_r)
-    return vec2(pos.x, pos.y) + rotated_r
+    rotated_r = rotate(pos[2], scaled_r)
+    return vec2(pos[0], pos[1]) + rotated_r
 
 def inverse_transform(pos: vec3, sca: vec2, p: vec2) -> vec2:
-    local = p - vec2(pos.x, pos.y)
-    local = rotate(-pos.z, local)
+    local = p - vec2(pos[0], pos[1])
+    local = rotate(-pos[2], local)
     local = vec2(local.x / sca.x, local.y / sca.y)
 
     return local

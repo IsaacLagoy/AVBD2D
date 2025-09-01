@@ -6,7 +6,7 @@ from shapes.rigid import Rigid
 from forces.force import Force
 from forces.manifold import Manifold
 import time
-from linalg.ldlt import solve
+from linalg.ldlt import solve, solve_glm
 from helper.constants import DEBUG_TIMING, PENALTY_MAX, PENALTY_MIN
 from helper.decorators import timer
 from shapes.body_system import BodySystem
@@ -19,10 +19,8 @@ from graph.dsatur import dsatur_coloring
 def clamp(x, lo, hi):
     return lo if x < lo else hi if x > hi else x
 
-def diag3(a: float, b: float, c: float) -> mat3x3:
-    return mat3(a, 0.0, 0.0,
-                0.0, b, 0.0,
-                0.0, 0.0, c)
+def diag3(a: float, b: float, c: float) -> np.ndarray:
+    return np.diag([a, b, c]).astype(np.float32)
 
 class Solver:
     def __init__(self) -> None:
@@ -70,65 +68,128 @@ class Solver:
         self.warmstart_forces()
         self.warmstart_bodies(dt)
         
+        start_color = time.perf_counter()
         # color rigid bodies
         self.colors = dsatur_coloring(self)
 
         for color in self.colors:
             color.reserve_space()
             
+        print(f'Graph Coloring: {(time.perf_counter() - start_color) * 1000:.3f}ms')
+            
         inv_dt2 = 1 / (dt * dt)
-        print('inv_dt2:', inv_dt2, dt)
         
         # main solver loop
         for iteration in range(self.iterations):
+            
+            start_primal = time.perf_counter()
             
             # primal update
             for color in self.colors:
                 if color.count == 0:
                     continue
                 
-                # build lhs
+                # LHS/RHS (Eqs. 5,6)
                 color.lhs[:, 0, 0] = self.body_system.mass[color.indices]
                 color.lhs[:, 1, 1] = self.body_system.mass[color.indices]  
                 color.lhs[:, 2, 2] = self.body_system.moment[color.indices]
-                
                 color.lhs *= inv_dt2
-                
-                # build rhs
+
                 color.rhs = np.einsum('bij,bj->bi', color.lhs, self.body_system.pos[color.indices] - self.body_system.inertial[color.indices])
                 
-                # find forces
-                for i, body in enumerate(color.get_bodies_iterator()):
-                    body_idx_in_color = i
-                    
-                    for force in body.get_forces_iterator():
+                sum_time = 0
+                
+                for i, current_body in enumerate(color.get_bodies_iterator()):
+                    if current_body.mass <= 0:
+                        current_body = current_body.next
+                        continue
+
+                    # LHS/RHS (Eqs. 5,6)
+                    M = diag3(current_body.mass, current_body.mass, current_body.moment)
+                    inv_dt2 = 1.0 / (dt * dt)
+
+                    lhs = M * inv_dt2                          # (3,3)
+                    rhs = (M * inv_dt2) @ (current_body.pos - current_body.inertial)
+
+                    # iterate forces acting on this body
+                    for force in current_body.get_forces_iterator():
+                        
+                        t0 = time.perf_counter()
 
                         # compute constraint & derivatives
                         force.computeConstraint(self.alpha)
-                        force.computeDerivatives(body)
+                        force.computeDerivatives(current_body)
                         
-                        # Vectorized accumulation for this force's contribution
+                        sum_time += time.perf_counter() - t0
+
                         for r in range(force.rows()):
-                            lam = force.lamb[r] if isinf(force.stiffness[r]) else 0
-                            f = clamp(force.penalty[r] * force.C[r] + lam + force.motor[r],
-                                    force.fmin[r], force.fmax[r])
-                            
-                            # Geometric stiffness
-                            Hc0, Hc1, Hc2 = force.H[r][0], force.H[r][1], force.H[r][2]
-                            G_diag = [glm.length(Hc0), glm.length(Hc1), glm.length(Hc2)]
-                            G_scaled = [g * abs(f) for g in G_diag]
-                            
-                            # Accumulate into vectorized arrays
-                            J = force.J[r]  # vec3
-                            color.rhs[body_idx_in_color] += J * f
-                            
-                            # Add outer product and geometric stiffness
-                            for j in range(3):
-                                for k in range(3):
-                                    color.lhs[body_idx_in_color, j, k] += J[j] * J[k] * force.penalty[r]
-                                color.lhs[body_idx_in_color, j, j] += G_scaled[j]
+                            # lambda=0 if not a hard constraint
+                            lam = force.lamb[r] if np.isinf(force.stiffness[r]) else 0.0
+
+                            # clamped force magnitude
+                            f = np.clip(force.penalty[r] * force.C[r] + lam + force.motor[r],
+                                        force.fmin[r], force.fmax[r])
+
+                            # diagonally lumped geometric stiffness G
+                            H = force.H[r]        # assume shape (3,3) numpy
+                            Hc0, Hc1, Hc2 = H[:,0], H[:,1], H[:,2]   # columns
+                            G = np.diag([np.linalg.norm(Hc0),
+                                        np.linalg.norm(Hc1),
+                                        np.linalg.norm(Hc2)]) * abs(f)
+
+                            # accumulate
+                            J = force.J[r]    # shape (3,)
+                            rhs += J * f
+                            lhs += np.outer(J, J * force.penalty[r]) + G
+
+                    # Solve SPD system and apply update (Eq. 4)
+                    # lhs is (3,3), rhs is (3,)
+                    lhs_batched = lhs[None, :, :]   # shape (1,3,3)
+                    rhs_batched = rhs[None, :]      # shape (1,3)
+
+                    delta = solve(lhs_batched, rhs_batched)[0]  # take back out of batch
+
+                    current_body.pos -= delta
+                    
+                print(f'Sum Time: {sum_time * 1000:.3f}ms')
+                
+                # body_map = {}
+                
+                # # find forces
+                # for i, body in enumerate(color.get_bodies_iterator()):
+                #     body_map[i] = []
+                    
+                #     for force in body.get_forces_iterator():
+
+                #         # compute constraint & derivatives
+                #         force.computeConstraint(self.alpha)
+                #         force.computeDerivatives(body)
                         
-                self.body_system.pos[color.indices] -= solve(color.lhs, color.rhs)
+                #         body_map[i].append(force.index)
+                        
+                #         for r in range(force.rows()):
+                #             # lambda=0 if not a hard constraint
+                #             lam = force.lamb[r] if isinf(force.stiffness[r]) else 0
+
+                #             # clamped force magnitude (Sec 3.2)
+                #             f = clamp(force.penalty[r] * force.C[r] + lam + force.motor[r],
+                #                         force.fmin[r], force.fmax[r])
+
+                #             # diagonally lumped geometric stiffness G (Sec 3.5)
+                #             # PyGLM mat3 is column-major; mat[0], mat[1], mat[2] are vec3 columns
+                #             Hc0 = force.H[r][0] # vec3
+                #             Hc1 = force.H[r][1]
+                #             Hc2 = force.H[r][2]
+                #             G = diag3(glm.length(Hc0), glm.length(Hc1), glm.length(Hc2)) * abs(f)
+
+                #             # accumulate (Eq. 13,17)
+                #             J = force.J[r]
+                #             color.rhs[i] += J * f
+                #             color.lhs[i] += glm.outerProduct(J, J * force.penalty[r]) + G
+                        
+                # self.body_system.pos[color.indices] -= solve(color.lhs, color.rhs)
+                
+            print(f'Primal Update: {(time.perf_counter() - start_primal) * 1000:.3f}ms')
                 
             # --------------------
             # Dual update
@@ -154,6 +215,10 @@ class Solver:
                         np.minimum(PENALTY_MAX, self.force_system.stiffness)),
                 self.force_system.penalty
             )
+            
+            start_dual = time.perf_counter()
+            
+            print(f'Dual Update: {(time.perf_counter() - start_dual) * 1000:.3f}ms')
 
         self.update_velocities(dt)
             
@@ -173,7 +238,7 @@ class Solver:
         
         for i, A in enumerate(bodies_list):
             for B in bodies_list[i + 1:]:
-                dp = (A.pos.xy - B.pos.xy)  # vec2
+                dp = (A.xy - B.xy)  # vec2
                 r = A.radius + B.radius
                 if glm.dot(dp, dp) <= r * r and not A.is_constrained_to(B):
                     # Create new manifold force - it will add itself to the linked lists

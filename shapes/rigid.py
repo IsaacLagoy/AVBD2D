@@ -23,7 +23,7 @@ class Rigid():
         self.color = color if color is not None else vec3(0.5)
         
         # compute mass and moment TODO this is only correct for the basic cube mesh
-        mass = scale.x * scale.y * density
+        mass = scale[0] * scale[1] * density
         moment = mass * glm.dot(scale, scale) / 12
         
         # broad collision
@@ -105,8 +105,8 @@ class Rigid():
         screen_points = []
         for world_point in self.vertices:
             # Transform world point to screen coordinates
-            sx = int(world_point.x * scale_factor + offset[0])
-            sy = int(-world_point.y * scale_factor + offset[1]) # Pygame's y-axis is inverted
+            sx = int(world_point[0] * scale_factor + offset[0])
+            sy = int(-world_point[1] * scale_factor + offset[1]) # Pygame's y-axis is inverted
             screen_points.append((sx, sy))
         
         # Draw the polygon using the transformed corners
@@ -209,8 +209,26 @@ class Rigid():
     # --------------------
     
     @property
+    def xy(self):
+        return self.system.pos[self.index][:2]
+    
+    @xy.setter
+    def xy(self, value):
+        self.update_vertices = True
+        self.system.pos[self.index][:2] = value
+        
+    @property
+    def z(self):
+        return self.system.pos[self.index][2]
+    
+    @z.setter
+    def z(self, value):
+        self.update_vertices = True
+        self.system.pos[self.index][2] = value
+    
+    @property
     def pos(self):
-        return glm.vec3(self.system.pos[self.index])
+        return self.system.pos[self.index]
     
     @pos.setter
     def pos(self, value):
@@ -219,7 +237,7 @@ class Rigid():
         
     @property
     def initial(self):
-        return glm.vec3(self.system.initial[self.index])
+        return self.system.initial[self.index]
     
     @initial.setter
     def initial(self, value):
@@ -227,7 +245,7 @@ class Rigid():
         
     @property
     def inertial(self):
-        return glm.vec3(self.system.inertial[self.index])
+        return self.system.inertial[self.index]
     
     @inertial.setter
     def inertial(self, value):
@@ -235,7 +253,7 @@ class Rigid():
         
     @property
     def vel(self):
-        return glm.vec3(self.system.vel[self.index])
+        return self.system.vel[self.index]
     
     @vel.setter
     def vel(self, value):
@@ -243,7 +261,7 @@ class Rigid():
         
     @property
     def prev_vel(self):
-        return glm.vec3(self.system.prev_vel[self.index])
+        return self.system.prev_vel[self.index]
     
     @prev_vel.setter
     def prev_vel(self, value):

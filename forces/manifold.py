@@ -81,8 +81,8 @@ class Manifold(Force):
                 t.x, t.y
             )
 
-            rAW = rotate_scale(self.body_a.pos.z, self.body_a.scale, self.contacts[i].rA)
-            rBW = rotate_scale(self.body_b.pos.z, self.body_b.scale, self.contacts[i].rB)
+            rAW = rotate_scale(self.body_a.z, self.body_a.scale, self.contacts[i].rA)
+            rBW = rotate_scale(self.body_b.z, self.body_b.scale, self.contacts[i].rB)
 
             self.contacts[i].JAn = vec3(n.x, n.y, cross(rAW, n))
             self.contacts[i].JBn = vec3(-n.x, -n.y, -cross(rBW, n))
@@ -90,8 +90,8 @@ class Manifold(Force):
             self.contacts[i].JBt = vec3(-t.x, -t.y, -cross(rBW, t))
 
             self.contacts[i].C0 = basis * (
-                (self.body_a.pos.xy + rAW)
-                - (self.body_b.pos.xy + rBW)
+                (self.body_a.xy + rAW)
+                - (self.body_b.xy + rBW)
             ) + vec2(COLLISION_MARGIN, 0)
 
         return self.num_contacts > 0

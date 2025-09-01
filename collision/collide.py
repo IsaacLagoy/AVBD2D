@@ -3,6 +3,7 @@ from glm import vec3, vec2
 from shapes.rigid import Rigid
 from helper.maths import inverse_transform
 from collision.sutherland_hodgman import sutherland_hodgmen
+import numpy as np
 
 
 def axes(body: Rigid) -> list[vec3]:
@@ -44,7 +45,7 @@ def sat(body_a: Rigid, body_b: Rigid) -> vec2 | None:
         if proj_a_min < proj_b_max and proj_a_max > proj_b_min:
             overlap = min(proj_a_max, proj_b_max) - max(proj_a_min, proj_b_min)
             assert overlap >= 0, 'Overlap is negative'
-            if glm.dot(body_b.pos.xy - body_a.pos.xy, axis) < 0:
+            if glm.dot(body_b.xy - body_a.xy, axis) < 0:
                 overlap *= -1
         else:
             return None
@@ -94,15 +95,13 @@ def collide(body_a: Rigid, body_b: Rigid, contacts) -> bool:
         return 0
     
     margin = depth * 0.02
-    c_normal = normal if glm.dot(body_a.pos.xy - body_b.pos.xy, normal) < 0 else -normal
+    c_normal = normal if glm.dot(body_a.xy - body_b.xy, normal) < 0 else -normal
     
     clipped.sort(key=lambda c: glm.dot(c, c_normal))
 
     # project points and find the closest
     rA = clipped[-1]
     rB = clipped[0]
-    
-
     
     contacts[0].normal = -c_normal
     contacts[0].rA = inverse_transform(body_a.pos, body_a.scale, rA)
@@ -112,7 +111,9 @@ def collide(body_a: Rigid, body_b: Rigid, contacts) -> bool:
     rB2 = clipped[1] if glm.dot(clipped[1], c_normal) < glm.dot(clipped[0], c_normal) + margin else rB
     
     # check if there is only on unique contact point
-    if (rA2 == rA and rB2 == rB) or (rB2 == rA or rA2 == rB):
+    if (np.allclose(rA2, rA) and np.allclose(rB2, rB)) or \
+       (np.allclose(rB2, rA) or np.allclose(rA2, rB)):
+
         return 1
     
     contacts[1].normal = -c_normal

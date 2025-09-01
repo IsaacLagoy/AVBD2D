@@ -91,7 +91,7 @@ Jacobians:
     
     @J.setter
     def J(self, value):
-        self.system.J[self.index] = value
+        self.system.J[self.index][:] = value
     
     @property
     def H(self):
@@ -99,7 +99,7 @@ Jacobians:
     
     @H.setter
     def H(self, value):
-        self.system.H[self.index] = value
+        self.system.H[self.index][:] = value
     
     # Basic force properties
     @property
@@ -108,7 +108,8 @@ Jacobians:
     
     @C.setter
     def C(self, value):
-        self.system.C[self.index] = value
+        print('C value:', value)
+        self.system.C[self.index][:] = value
     
     @property
     def motor(self):

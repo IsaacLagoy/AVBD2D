@@ -1,6 +1,8 @@
 import numpy as np
 import numba as nb
+import glm
 
+@nb.njit(parallel=True)
 def solve(lhs: np.ndarray, rhs: np.ndarray) -> np.ndarray:
     N = lhs.shape[0]
     out = np.empty((N, 3), dtype=lhs.dtype)
@@ -37,3 +39,6 @@ def solve(lhs: np.ndarray, rhs: np.ndarray) -> np.ndarray:
         out[i, 2] = x2
 
     return out
+
+def solve_glm(lhs, rhs):
+    return glm.inverse(lhs) * rhs
