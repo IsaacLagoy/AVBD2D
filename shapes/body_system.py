@@ -23,6 +23,8 @@ class BodySystem():
         self.mass     = np.ones(max_bodies, dtype='float32')
         self.moment   = np.ones(max_bodies, dtype='float32')
         
+        self.updated  = np.zeros(max_bodies, dtype=bool)
+        
         # track empty indices
         self.free_indices = set(range(max_bodies))
         
@@ -49,6 +51,8 @@ class BodySystem():
             self.mass     = np.hstack([self.mass,     np.ones(self.max_bodies, dtype='float32')])
             self.moment   = np.hstack([self.moment,   np.ones(self.max_bodies, dtype='float32')])
             
+            self.updated  = np.hstack([self.moment,   np.ones(self.max_bodies, dtype=bool)])
+            
             # add new free indices
             self.free_indices.update(range(self.max_bodies, new_max))
             self.max_bodies = new_max
@@ -66,6 +70,8 @@ class BodySystem():
         self.friction[index] = friction
         self.mass[index]     = mass
         self.moment[index]   = moment
+        
+        self.updated[index]  = True
         
         self.size += 1
         return index
@@ -109,6 +115,8 @@ class BodySystem():
             self.friction[front], self.friction[back] = self.friction[back], self.friction[front]
             self.mass[front],     self.mass[back]     = self.mass[back],     self.mass[front]
             self.moment[front],   self.moment[back]   = self.moment[back],   self.moment[front]
+            
+            self.updated[front],  self.updated[back]  = self.updated[back],  self.updated[front]
 
             # Update Body objects
             body = self.bodies.pop(back)

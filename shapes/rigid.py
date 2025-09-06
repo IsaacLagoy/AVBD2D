@@ -38,8 +38,7 @@ class Rigid():
         # graph coloring
         self.reset_coloring()
         
-        # lazy update vertices # TODO replace this with inverse transformations
-        self.update_vertices = True
+        self.needs_mat_update = True
         
     # --------------------
     # Self Linked List Operations
@@ -102,7 +101,7 @@ class Rigid():
         """Draws the rectangle in Pygame coordinates, accounting for position, rotation, and scale."""
         # Transform each corner from local space to world space, then to screen space
         screen_points = []
-        for world_point in self.vertices:
+        for world_point in self.trans_vertices:
             # Transform world point to screen coordinates
             sx = int(world_point[0] * scale_factor + offset[0])
             sy = int(-world_point[1] * scale_factor + offset[1]) # Pygame's y-axis is inverted
@@ -184,6 +183,20 @@ class Rigid():
         dir /= self.scale
         
         return np.dot(self.vertices, dir)
+    
+    def generate_private_mats(self) -> None:
+        self._rot_sca_mat = np.array([
+            [self.scale[0] * np.cos(self.pos[2]), -self.scale[1] * np.sin(self.pos[2])],
+            [self.scale[0] * np.sin(self.pos[2]),  self.scale[1] * np.cos(self.pos[2])],
+        ], dtype='float32')
+        
+        inv_sx = 1 / self.scale[0]
+        inv_sy = 1 / self.scale[1]
+        
+        self._inv_rot_sca_mat = np.array([
+            [inv_sx *  np.cos(self.pos[2]), inv_sx * np.sin(self.pos[2])],
+            [inv_sy * -np.sin(self.pos[2]), inv_sy * np.cos(self.pos[2])],
+        ], dtype='float32')
         
     # --------------------
     # Properties
@@ -196,13 +209,28 @@ class Rigid():
     
     @property
     def vertices(self):
-        return [transform(self.pos, self.scale, v) for v in self.mesh.vertices]
+        return self.mesh.vertices
     
     @property
-    def edges(self):
-        verts = self.vertices
-        l = len(verts)
-        return [(verts[i], verts[(i + 1) % l]) for i in range(l)]
+    def trans_vertices(self):
+        verts = self.vertices @ self.rot_sca_mat.T
+        return verts + self.pos[:2]
+        
+    @property
+    def rot_sca_mat(self):
+        if self.needs_mat_update:
+            self.generate_private_mats()
+            self.needs_mat_update = False
+        
+        return self._rot_sca_mat
+    
+    @property
+    def inv_rot_sca_mat(self):
+        if self.needs_mat_update:
+            self.generate_private_mats()
+            self.needs_mat_update = False
+        
+        return self._inv_rot_sca_mat
     
     # --------------------
     # body system properties
@@ -225,6 +253,15 @@ class Rigid():
     def z(self, value):
         self.update_vertices = True
         self.system.pos[self.index][2] = value
+        
+    @property
+    def updated(self):
+        return self.system.updated[self.index]
+    
+    @updated.setter
+    def updated(self, value):
+        self.update_vertices = True
+        self.system.updated[self.index] = value
     
     @property
     def pos(self):

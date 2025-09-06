@@ -8,9 +8,10 @@ from helper.constants import DRAW_FORCE
 from graph.dsatur import dsatur_coloring
 from graph.visuals import get_color
 from glm import vec2, vec3
+import numpy as np
 
 
-BODIES = 50
+BODIES = 52
 
 def update_body_colors(solver):
     """Update visual colors of all bodies based on their graph coloring"""
@@ -39,19 +40,26 @@ def main():
     current_fps = 0
     solver = Solver()
     
-    cube_mesh = Mesh([vec2(-0.5, 0.5), vec2(-0.5, -0.5), vec2(0.5, -0.5), vec2(0.5, 0.5)])
+    cube_points = [(-0.5, 0.5),
+               (-0.5, -0.5),
+               ( 0.5, -0.5),
+               ( 0.5,  0.5)]
+
+    cube_mesh = Mesh(np.array(cube_points, dtype=np.float32))
     
     # add playbox (static bodies)
     Rigid(solver.body_system, cube_mesh, vec3(0, 0, 0), vec2(30, 0.75), color=vec3(0.4, 0.4, 0.4), density=-1)
-    Rigid(solver.body_system, cube_mesh, vec3(15.5, 2, 0), vec2(0.75, 5), color=vec3(0.4, 0.4, 0.4), density=-1)
-    Rigid(solver.body_system, cube_mesh, vec3(-15.5, 2, 0), vec2(0.75, 5), color=vec3(0.4, 0.4, 0.4), density=-1)
+    # Rigid(solver.body_system, cube_mesh, vec3(15.5, 2, 0), vec2(0.75, 5), color=vec3(0.4, 0.4, 0.4), density=-1)
+    # Rigid(solver.body_system, cube_mesh, vec3(-15.5, 2, 0), vec2(0.75, 5), color=vec3(0.4, 0.4, 0.4), density=-1)
+    
+    dx = 10
     
     # add random bodies
     for _ in range(BODIES):
         Rigid(solver.body_system, cube_mesh, 
-              vec3(0, 6, 0) + vec3(uniform(-5, 5), uniform(-5, 5), 0), 
+              vec3(0, 1.0, 0) + vec3(uniform(-dx, dx), uniform(-dx, dx), uniform(-dx, dx)), 
               vec2(uniform(1, 2), uniform(1, 2)), 
-              color=vec3(0.6, 0.6, 0.6),  # Default color, will be updated by coloring
+              color=vec3(0, 0, 1),  # Default color, will be updated by coloring
               density=1)
     
     # Perform initial graph coloring and update colors
@@ -77,13 +85,13 @@ def main():
             fps_timer = 0
         
         # Update graph coloring periodically
-        coloring_timer += dt
-        if coloring_timer >= coloring_interval:
-            chromatic_number = update_body_colors(solver)
-            coloring_timer = 0
+        # coloring_timer += dt
+        # if coloring_timer >= coloring_interval:
+        #     chromatic_number = update_body_colors(solver)
+        #     coloring_timer = 0
             
-            for rigid in solver.get_bodies_iterator():
-                rigid.color = get_color(rigid.graph_color, chromatic_number)
+        #     for rigid in solver.get_bodies_iterator():
+        #         rigid.color = get_color(rigid.graph_color, chromatic_number)
             
         # step physics
         solver.step(max(dt, 1e-4))
