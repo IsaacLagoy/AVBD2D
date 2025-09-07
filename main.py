@@ -9,9 +9,10 @@ from graph.dsatur import dsatur_coloring
 from graph.visuals import get_color
 from glm import vec2, vec3
 import numpy as np
+from math import pi
 
 
-BODIES = 52
+BODIES = 50
 
 def update_body_colors(solver):
     """Update visual colors of all bodies based on their graph coloring"""
@@ -38,7 +39,7 @@ def main():
     # FPS counter variables
     fps_timer = 0
     current_fps = 0
-    solver = Solver()
+    solver = Solver(screen)
     
     cube_points = [(-0.5, 0.5),
                (-0.5, -0.5),
@@ -47,20 +48,24 @@ def main():
 
     cube_mesh = Mesh(np.array(cube_points, dtype=np.float32))
     
-    # add playbox (static bodies)
-    Rigid(solver.body_system, cube_mesh, vec3(0, 0, 0), vec2(30, 0.75), color=vec3(0.4, 0.4, 0.4), density=-1)
+    # # add playbox (static bodies)
+    # Rigid(solver.body_system, cube_mesh, vec3(0, 0, 0), vec2(30, 1), color=vec3(0.4, 0.4, 0.4), density=-1)
     # Rigid(solver.body_system, cube_mesh, vec3(15.5, 2, 0), vec2(0.75, 5), color=vec3(0.4, 0.4, 0.4), density=-1)
     # Rigid(solver.body_system, cube_mesh, vec3(-15.5, 2, 0), vec2(0.75, 5), color=vec3(0.4, 0.4, 0.4), density=-1)
     
-    dx = 10
+    dx = 0
+    dr = 0
+    smin = 0.5
+    smax = 2.5
     
     # add random bodies
-    for _ in range(BODIES):
-        Rigid(solver.body_system, cube_mesh, 
-              vec3(0, 1.0, 0) + vec3(uniform(-dx, dx), uniform(-dx, dx), uniform(-dx, dx)), 
-              vec2(uniform(1, 2), uniform(1, 2)), 
-              color=vec3(0, 0, 1),  # Default color, will be updated by coloring
-              density=1)
+    for x in range(-5, 5):
+        for y in range(-5, 5):
+            Rigid(solver.body_system, cube_mesh, 
+                vec3(x * 2, y * 2, x * y) + vec3(uniform(-dx, dx), uniform(-dx, dx), uniform(0, dr)), 
+                vec2(1, 2), 
+                color=vec3(0, 0, 1),  # Default color, will be updated by coloring
+                density=1)
     
     # Perform initial graph coloring and update colors
     chromatic_number = 0

@@ -22,7 +22,9 @@ def diag3(a: float, b: float, c: float) -> np.ndarray:
     return np.diag([a, b, c]).astype(np.float32)
 
 class Solver:
-    def __init__(self) -> None:
+    def __init__(self, screen) -> None:
+        self.screen = screen
+        
         # physics params
         self.iterations = 10
         self.beta = 1e5

@@ -96,19 +96,42 @@ class Rigid():
     # --------------------
     # Pygame Draw
     # --------------------
+
+    def draw(self, screen, scale_factor=20, offset=(400, 300), color=None, draw_normals=False, normal_length=1.0, normal_color=(255, 0, 0)):
+        """Draws the rectangle with normals emanating from the body center."""
         
-    def draw(self, screen, scale_factor=20, offset=(400, 300)):
-        """Draws the rectangle in Pygame coordinates, accounting for position, rotation, and scale."""
-        # Transform each corner from local space to world space, then to screen space
+        # Use consistent transformations
+        world_vertices = self.trans_vertices
+        color = self.color if color is None else color
+        
         screen_points = []
-        for world_point in self.trans_vertices:
-            # Transform world point to screen coordinates
+        for world_point in world_vertices:
             sx = int(world_point[0] * scale_factor + offset[0])
-            sy = int(-world_point[1] * scale_factor + offset[1]) # Pygame's y-axis is inverted
+            sy = int(-world_point[1] * scale_factor + offset[1])
             screen_points.append((sx, sy))
         
-        # Draw the polygon using the transformed corners
-        pygame.draw.polygon(screen, self.color, screen_points, 2)
+        pygame.draw.polygon(screen, color, screen_points, 2)
+        
+        if draw_normals:
+            # Use your precomputed matrix for consistency
+            world_normals = self.mesh.normals @ self.inv_rot_sca_mat
+            
+            # Calculate body center in world space
+            body_center = np.mean(world_vertices, axis=0)
+            
+            # Convert center to screen coordinates
+            center_sx = int(body_center[0] * scale_factor + offset[0])
+            center_sy = int(-body_center[1] * scale_factor + offset[1])
+            
+            # Draw normals from body center
+            for i, normal in enumerate(world_normals):
+                normal_end = body_center + normal * normal_length
+                
+                end_sx = int(normal_end[0] * scale_factor + offset[0])
+                end_sy = int(-normal_end[1] * scale_factor + offset[1])
+                
+                pygame.draw.line(screen, normal_color, (center_sx, center_sy), (end_sx, end_sy), 2)
+                pygame.draw.circle(screen, normal_color, (end_sx, end_sy), 3)
         
     # --------------------
     # Iterators
@@ -185,18 +208,21 @@ class Rigid():
         return np.dot(self.vertices, dir)
     
     def generate_private_mats(self) -> None:
-        self._rot_sca_mat = np.array([
-            [self.scale[0] * np.cos(self.pos[2]), -self.scale[1] * np.sin(self.pos[2])],
-            [self.scale[0] * np.sin(self.pos[2]),  self.scale[1] * np.cos(self.pos[2])],
+        self._rot_mat = np.array([
+            [np.cos(self.pos[2]), -np.sin(self.pos[2])],
+            [np.sin(self.pos[2]),  np.cos(self.pos[2])],
         ], dtype='float32')
         
-        inv_sx = 1 / self.scale[0]
-        inv_sy = 1 / self.scale[1]
-        
-        self._inv_rot_sca_mat = np.array([
-            [inv_sx *  np.cos(self.pos[2]), inv_sx * np.sin(self.pos[2])],
-            [inv_sy * -np.sin(self.pos[2]), inv_sy * np.cos(self.pos[2])],
+        self._sca_mat = np.array([
+            [self.scale[0], 0],
+            [0, self.scale[1]],
         ], dtype='float32')
+        
+        # CORRECTED: This should be rot_mat @ sca_mat
+        self._rot_sca_mat = self._rot_mat @ self._sca_mat
+        
+        # CORRECTED: This should be the inverse of rot_sca_mat transposed
+        self._inv_rot_sca_mat = np.linalg.inv(self._rot_sca_mat).T
         
     # --------------------
     # Properties
@@ -213,7 +239,7 @@ class Rigid():
     
     @property
     def trans_vertices(self):
-        verts = self.vertices @ self.rot_sca_mat.T
+        verts = self.vertices @ (self.rot_mat @ self.sca_mat).T
         return verts + self.pos[:2]
         
     @property
@@ -223,6 +249,22 @@ class Rigid():
             self.needs_mat_update = False
         
         return self._rot_sca_mat
+    
+    @property
+    def rot_mat(self):
+        if self.needs_mat_update:
+            self.generate_private_mats()
+            self.needs_mat_update = False
+        
+        return self._rot_mat
+    
+    @property
+    def sca_mat(self):
+        if self.needs_mat_update:
+            self.generate_private_mats()
+            self.needs_mat_update = False
+        
+        return self._sca_mat
     
     @property
     def inv_rot_sca_mat(self):
