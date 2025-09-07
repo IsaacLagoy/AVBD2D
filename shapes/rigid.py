@@ -222,7 +222,7 @@ class Rigid():
         self._rot_sca_mat = self._rot_mat @ self._sca_mat
         
         # CORRECTED: This should be the inverse of rot_sca_mat transposed
-        self._inv_rot_sca_mat = np.linalg.inv(self._rot_sca_mat).T
+        self._inv_rot_sca_mat = np.linalg.inv(self._rot_sca_mat)
         
     # --------------------
     # Properties
