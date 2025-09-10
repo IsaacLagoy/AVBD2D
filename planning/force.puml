@@ -1,0 +1,52 @@
+@startuml force
+
+!include contact.puml
+
+class Force {
+    rows: 0
+}
+
+class Manifold {
+    rows: 4
+}
+
+class Joint {
+    rows: 3
+}
+
+class Spring {
+    rows: 1
+}
+
+Force ..> Manifold
+Force ..> Joint
+Force ..> Spring
+
+Manifold ..> ContactSystem : contact_index
+Force ..> ForceSystem : index
+
+class ForceSystem {
+    type: short
+    ---
+    J: 3x1[4]
+    ---
+    H: 3x3[4]
+    ---
+    C: float[4]
+    ---
+    motor: float[4]
+    ---
+    stiffness: float[4]
+    ---
+    fmax: float[4]
+    ---
+    fmin: float[4]
+    ---
+    fracture: float[4]
+    ---
+    penalty: float[4]
+    ---
+    lambda: float[4]
+}
+
+@enduml

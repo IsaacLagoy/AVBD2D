@@ -23,7 +23,18 @@ class BodySystem():
         self.mass     = np.ones(max_bodies, dtype='float32')
         self.moment   = np.ones(max_bodies, dtype='float32')
         
-        self.updated  = np.zeros(max_bodies, dtype=bool)
+        self.scale = np.ones((max_bodies, 2), dtype='float32')
+        self.radius = np.ones(max_bodies, dtype='float32')
+        
+        # object reference
+        self.mesh = np.zeros(max_bodies, dtype='int32')
+        
+        # mats
+        self.s_ir = np.zeros((max_bodies, 2, 2), dtype='float32')
+        self.irs  = np.zeros((max_bodies, 2, 2), dtype='float32')
+        
+        # lazy updating
+        self.updated  = np.zeros(max_bodies, dtype=np.bool_)
         
         # track empty indices
         self.free_indices = set(range(max_bodies))
@@ -31,7 +42,7 @@ class BodySystem():
         # map index -> body object
         self.bodies = {}
         
-    def insert(self, pos, vel, friction, mass, moment) -> int:
+    def insert(self, pos, vel, friction, mass, moment, scale, mesh_idx) -> int:
         """
         Insert Rigid data into the arrays. This should only be called from the Rigid constructor. Returns index inserted
         """
@@ -51,7 +62,15 @@ class BodySystem():
             self.mass     = np.hstack([self.mass,     np.ones(self.max_bodies, dtype='float32')])
             self.moment   = np.hstack([self.moment,   np.ones(self.max_bodies, dtype='float32')])
             
-            self.updated  = np.hstack([self.moment,   np.ones(self.max_bodies, dtype=bool)])
+            self.scale = np.vstack([self.scale, np.ones((self.max_bodies, 2), dtype='float32')])
+            self.radius = np.hstack((self.radius, np.ones(self.max_bodies, dtype='float32')))
+            
+            self.mesh = np.hstack((self.mesh, np.zeros(self.max_bodies, dtype='int32')))
+            
+            self.s_ir = np.vstack((self.s_ir, np.zeros((self.max_bodies, 2, 2), dtype='float32')))
+            self.irs  = np.vstack((self.irs, np.zeros((self.max_bodies, 2, 2), dtype='float32')))
+            
+            self.updated  = np.hstack([self.updated,   np.ones(self.max_bodies, dtype=bool)])
             
             # add new free indices
             self.free_indices.update(range(self.max_bodies, new_max))
@@ -71,11 +90,17 @@ class BodySystem():
         self.mass[index]     = mass
         self.moment[index]   = moment
         
-        self.updated[index]  = True
+        self.scale[index] = [i for i in scale]
+        self.radius[index] = np.linalg.norm(self.scale[index])
+        
+        self.mesh[index] = mesh_idx
+        
+        # NOTE will update matrices when needed, not on initialization
+        
+        self.updated[index]  = False
         
         self.size += 1
         return index
-        # TODO Rigid needs to add itself to the bodies list
         
     def delete(self, index) -> None:
         if index in self.bodies:
@@ -87,46 +112,50 @@ class BodySystem():
         """
         Move active bodies to the contiguous front of the arrays using an O(n) front-back swap.
         """
-        if not self.free_indices:
+        if not self.free_indices or self.size == 0:
             return
-
-        front = 0
-        back = self.max_bodies - 1
-
-        while front < back:
-            # Move front forward to the first free slot
-            while front < back and front not in self.free_indices:
-                front += 1
-            # Move back backward to the last active slot
-            while front < back and back in self.free_indices:
-                back -= 1
-
-            if front >= back:
-                break
-
-            # Swap all attributes
-            self.pos[front],      self.pos[back]      = self.pos[back],      self.pos[front]
-            self.initial[front],  self.initial[back]  = self.initial[back],  self.initial[front]
-            self.inertial[front], self.inertial[back] = self.inertial[back], self.inertial[front]
-
-            self.vel[front],      self.vel[back]      = self.vel[back],      self.vel[front]
-            self.prev_vel[front], self.prev_vel[back] = self.prev_vel[back], self.prev_vel[front]
-
-            self.friction[front], self.friction[back] = self.friction[back], self.friction[front]
-            self.mass[front],     self.mass[back]     = self.mass[back],     self.mass[front]
-            self.moment[front],   self.moment[back]   = self.moment[back],   self.moment[front]
-            
-            self.updated[front],  self.updated[back]  = self.updated[back],  self.updated[front]
-
-            # Update Body objects
-            body = self.bodies.pop(back)
-            body.index = front
-            self.bodies[front] = body
-
-            # Update free indices
-            self.free_indices.remove(front)
-            self.free_indices.add(back)
-
-            # Move pointers
-            front += 1
-            back -= 1
+        
+        # Create mapping from old indices to new indices
+        active_indices = [i for i in range(self.max_bodies) if i not in self.free_indices]
+        
+        if len(active_indices) == 0:
+            return
+        
+        # Only proceed if we actually need to move things
+        if active_indices == list(range(len(active_indices))):
+            return  # Already compact
+        
+        # Use numpy advanced indexing to reorder arrays (vectorized)
+        self.pos[:self.size] = self.pos[active_indices]
+        self.initial[:self.size] = self.initial[active_indices]
+        self.inertial[:self.size] = self.inertial[active_indices]
+        
+        self.vel[:self.size] = self.vel[active_indices]
+        self.prev_vel[:self.size] = self.prev_vel[active_indices]
+        
+        self.friction[:self.size] = self.friction[active_indices]
+        self.mass[:self.size] = self.mass[active_indices]
+        self.moment[:self.size] = self.moment[active_indices]
+        
+        self.scale[:self.size] = self.scale[active_indices]
+        self.radius[:self.size] = self.radius[active_indices]
+        
+        self.mesh[:self.size] = self.mesh[active_indices]
+        
+        self.s_ir[:self.size] = self.s_ir[active_indices]
+        self.irs[:self.size] = self.irs[active_indices]
+        
+        self.updated[:self.size] = self.updated[active_indices]
+        
+        # update rigid objects and rebuild dictionary
+        new_bodies = {}
+        for new_idx, old_idx in enumerate(active_indices):
+            if old_idx in self.bodies:
+                body = self.bodies[old_idx]
+                body.index = new_idx
+                new_bodies[new_idx] = body
+                
+        self.bodies = new_bodies
+        
+        # update free indices with tail
+        self.free_indices = set(range(self.size, self.max_bodies))

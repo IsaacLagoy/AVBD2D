@@ -15,7 +15,7 @@ SHOW_CONTACTS = True
 class Manifold(Force):
     
     def __init__(self, system: ForceSystem, body_a: Rigid, body_b: Rigid) -> None:
-        super().__init__(system, body_a, body_b)
+        super().__init__(system, body_a, body_b, 0)
         
         # insert into contacts list
         self.contact_index = self.system.contacts.insert()

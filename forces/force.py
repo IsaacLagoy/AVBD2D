@@ -5,7 +5,7 @@ from helper.constants import ROWS
 
 class Force():
     
-    def __init__(self, system: ForceSystem, body_a: Rigid, body_b: Rigid) -> None:
+    def __init__(self, system: ForceSystem, body_a: Rigid, body_b: Rigid, type: int) -> None:
         self.system = system
         
         # initiate linked lists
@@ -33,7 +33,7 @@ class Force():
             body_b.degree += 1
             
         # initialize in the system
-        self.index = self.system.insert()
+        self.index = self.system.insert(type)
         self.system.forces[self.index] = self
         
     # remove self from solver linked list
@@ -89,82 +89,41 @@ Jacobians:
     def J(self):
         return self.system.J[self.index]
     
-    @J.setter
-    def J(self, value):
-        self.system.J[self.index][:] = value
-    
     @property
     def H(self):
         return self.system.H[self.index]
-    
-    @H.setter
-    def H(self, value):
-        self.system.H[self.index][:] = value
     
     # Basic force properties
     @property
     def C(self):
         return self.system.C[self.index]
     
-    @C.setter
-    def C(self, value):
-        print('C value:', value)
-        self.system.C[self.index][:] = value
-    
     @property
     def motor(self):
         return self.system.motor[self.index]
-    
-    @motor.setter
-    def motor(self, value):
-        self.system.motor[self.index] = value
     
     # Constraint parameters
     @property
     def stiffness(self):
         return self.system.stiffness[self.index]
     
-    @stiffness.setter
-    def stiffness(self, value):
-        self.system.stiffness[self.index] = value
-    
     @property
     def fmax(self):
         return self.system.fmax[self.index]
-    
-    @fmax.setter
-    def fmax(self, value):
-        self.system.fmax[self.index] = value
     
     @property
     def fmin(self):
         return self.system.fmin[self.index]
     
-    @fmin.setter
-    def fmin(self, value):
-        self.system.fmin[self.index] = value
-    
     @property
     def fracture(self):
         return self.system.fracture[self.index]
-    
-    @fracture.setter
-    def fracture(self, value):
-        self.system.fracture[self.index] = value
     
     # Solver parameters
     @property
     def penalty(self):
         return self.system.penalty[self.index]
     
-    @penalty.setter
-    def penalty(self, value):
-        self.system.penalty[self.index] = value
-    
     @property
     def lamb(self):
         return self.system.lamb[self.index]
-    
-    @lamb.setter
-    def lamb(self, value):
-        self.system.lamb[self.index] = value

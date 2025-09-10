@@ -1,0 +1,28 @@
+@startuml contact
+
+class ContactSystem {
+    normal: 2x1[2]
+    ---
+    rA: 2x1[2]
+    ---
+    rB: 2x1[2]
+    ---
+    stick: bool[2]
+    ---
+    JAn: 3x1[2]
+    ---
+    JBn: 3x1[2]
+    ---
+    JAt: 3x1[2]
+    ---
+    JBt: 3x1[2]
+    ---
+    C0: 2x1[2]
+    ---
+    num_Contact
+    (Remove Must Be 2)
+    ---
+    friction: float
+}
+
+@enduml

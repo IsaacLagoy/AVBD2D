@@ -46,7 +46,7 @@ def main():
                ( 0.5, -0.5),
                ( 0.5,  0.5)]
 
-    cube_mesh = Mesh(np.array(cube_points, dtype=np.float32))
+    cube_mesh = Mesh(solver.mesh_system, np.array(cube_points, dtype=np.float32))
     
     # # add playbox (static bodies)
     # Rigid(solver.body_system, cube_mesh, vec3(0, 0, 0), vec2(30, 1), color=vec3(0.4, 0.4, 0.4), density=-1)

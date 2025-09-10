@@ -13,6 +13,8 @@ import numpy as np
 import numba as nb
 from graph.dsatur import dsatur_coloring
 from forces.manifold import Manifold
+from shapes.mesh_system import MeshSystem
+import math
 
 
 def clamp(x, lo, hi):
@@ -40,6 +42,7 @@ class Solver:
         # systems
         self.body_system = BodySystem(self, 128)
         self.force_system = ForceSystem(self, 1024)
+        self.mesh_system = MeshSystem(self, 1024)
         
         # parallelization variables
         self.colors = []
@@ -66,6 +69,7 @@ class Solver:
         start_time = time.perf_counter()
         
         self.spherical_broad_collision()
+        self.collide()
         self.warmstart_forces()
         self.warmstart_bodies(dt)
         
@@ -142,30 +146,113 @@ class Solver:
     # BroadPhase
     # --------------------
     
+    # TODO replace this with Dynamic BVH TODO iterate since bodies are compact
     @timer('Broadphase', on=DEBUG_TIMING)
     def spherical_broad_collision(self) -> None:
-        # Convert linked list to list for easier iteration
-        bodies_list = list(self.get_bodies_iterator())
+        # clear collision pairs
+        self.force_system.pairs = []
         
-        count = 0
-        st = 0
+        # compact so that indexing is more cache friendly
+        self.body_system.compact()
         
-        for i, A in enumerate(bodies_list):
-            for B in bodies_list[i + 1:]:
-                dp = (A.xy - B.xy)  # vec2
-                r = A.radius + B.radius
-                if np.dot(dp, dp) <= r * r and not A.is_constrained_to(B):
-                    # Create new manifold force - it will add itself to the linked lists
-                    s = time.perf_counter()
-                    Manifold(self.force_system, A, B)
-                    st += time.perf_counter() - s
-                    count += 1
-                    
-        print(count)
-        print(f'Total Manifold Init: {st * 1000:.3f}ms')
+        # compute all radii sums
+        N = self.body_system.size
+        
+        # NOTE this looped part may be better when njit
+        
+        # table = np.empty((N, N), dtype=np.float32)
+
+        # for i in range(N):
+        #     temp = self.body_system.pos[i, :2] - self.body_system.pos[:N, :2]  # shape (N, 2)
+        #     dist2 = np.sum(temp**2, axis=1)  # squared distances
+        #     rsum2 = (self.body_system.radius[i] + self.body_system.radius[:N])**2
+        #     table[i, :] = rsum2 - dist2
+        
+        pos = self.body_system.pos[:N, :2]  # shape (N,2)
+        radii = self.body_system.radius[:N]  # shape (N,)
+
+        # pairwise squared distances using broadcasting
+        diff = pos[:, None, :] - pos[None, :, :]  # shape (N, N, 2)
+        dist2 = np.sum(diff**2, axis=2)           # shape (N, N)
+        rsum2 = (radii[:, None] + radii[None, :])**2
+
+        table = rsum2 - dist2
+
+        overlaps = np.argwhere(table > 0)
+        for i, j in overlaps:
+            if i < j:  # optional: only handle each pair once
+                # count += 1
+                self.force_system.pairs.append((i, j))
+                
+        # convert pairs to numpy array
+        self.force_system.pairs = np.array(self.force_system.pairs)
+                
+        keeps = np.ones(len(self.force_system.pairs), dtype=np.bool_)
+        for index, (i, j) in enumerate(self.force_system.pairs):
+            A: Rigid = self.body_system.bodies[i]
+            B: Rigid = self.body_system.bodies[j]
+            
+            if not A.is_constrained_to(B):
+                continue
+            
+            # if it is constrained, remove from mask
+            keeps[index] = 0
+            
+        self.force_system.pairs = self.force_system.pairs[keeps]
+        
+    # --------------------
+    # Narrow Collision
+    # --------------------
+    
+    @timer('Narrow Collision', on=DEBUG_TIMING)
+    def collide(self) -> None:
+        # compute transformation matrices of moved objects
+        self.compute_body_transforms(
+            self.body_system.pos,
+            self.body_system.scale, 
+            self.body_system.updated,
+            self.body_system.s_ir,
+            self.body_system.irs,
+            self.body_system.size
+        )
+        
+        # compute collisions between objects
+        self.force_system.collide()
+        
+    # NOTE threading overhead is too expensive for parallelization
+    @staticmethod
+    @nb.njit(fastmath=True)
+    def compute_body_transforms(pos, scale, updated, s_ir, irs, size):
+        for i in range(size):
+            if updated[i]:  # Only process non-updated bodies
+                continue
+            
+            angle = pos[i, 2]
+            sx = scale[i, 0]
+            sy = scale[i, 1]
+            
+            # Compute trigonometric values
+            c = math.cos(angle)
+            s = math.sin(angle)
+            
+            # Compute inverse scale values
+            inv_sx = 1.0 / sx
+            inv_sy = 1.0 / sy
+            
+            # s_ir = scale @ inv(rotation)
+            s_ir[i, 0, 0] = sx * c
+            s_ir[i, 0, 1] = sx * s
+            s_ir[i, 1, 0] = -sy * s
+            s_ir[i, 1, 1] = sy * c
+            
+            # irs = inv(rotation @ scale)
+            irs[i, 0, 0] = c * inv_sx
+            irs[i, 0, 1] = s * inv_sx
+            irs[i, 1, 0] = -s * inv_sy
+            irs[i, 1, 1] = c * inv_sy
                     
     # ------------------------------------
-    # Force Warmstart and Narrow Collision
+    # Force Warmstart
     # ------------------------------------
             
     @timer('Warmstart Forces', on=DEBUG_TIMING)        
@@ -244,12 +331,14 @@ class Solver:
     # ----------------
     
     def update_velocities(self, dt: float) -> None:
-        current_body = self.bodies
-        while current_body is not None:
-            current_body.prev_vel = current_body.vel
-            if current_body.mass > 0:
-                current_body.vel = (current_body.pos - current_body.initial) / dt
-            current_body = current_body.next
+        inv_dt = 1 / dt
+        # Get active slice of arrays
+        active_slice = slice(0, self.body_system.size)
+        self.body_system.prev_vel[active_slice] = self.body_system.vel[active_slice]
+        
+        mass_slice = self.body_system.mass[active_slice] > 0
+        
+        self.body_system.vel[active_slice][mass_slice] = inv_dt * (self.body_system.pos[active_slice][mass_slice] - self.body_system.initial[active_slice][mass_slice])
                 
     # --------------------
     # Subobject Management

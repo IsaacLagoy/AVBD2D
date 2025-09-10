@@ -1,0 +1,69 @@
+@startuml main
+
+!include body.puml
+!include force.puml
+!include mesh.puml
+
+class Solver {
+    bodies: Rigid*
+    forces: Force*
+}
+
+protocol GJK {
+    pos_a: 3x1
+    pos_b: 3x1
+    vertices_a: 2x1[n]
+    vertices_b: 2x1[n]
+    simplex: 
+    ---
+    collided: bool
+}
+
+protocol EPA {
+    pos_a: 3x1
+    pos_b: 3x1
+    vertices_a: 2x1[n]
+    vertices_b: 2x1[n]
+    simplex: 
+    ---
+    normal: 3x1
+}
+
+protocol FrameStart {}
+protocol Spherical {}
+protocol PostMVT {}
+protocol GenerateManifolds {}
+protocol CompactBodies {}
+protocol CompactForces {}
+
+FrameStart --> CompactBodies
+BodySystem ..> CompactBodies
+
+CompactBodies --> Spherical
+BodySystem ..> Spherical : pos & radius
+Spherical ..> ForceSystem : test pairs
+
+Spherical --> GJK
+BodySystem ..> GJK : pos & scale
+MeshSystem ..> GJK : vertices
+ForceSystem ..> GJK : test collision pairs
+
+GJK --> EPA
+
+EPA --> PostMVT
+
+PostMVT ..> ContactSystem : return contacts
+PostMVT --> GenerateManifolds
+
+GenerateManifolds ..> ForceSystem : add manifolds
+
+ForceSystem ..> CompactForces
+GenerateManifolds --> CompactForces
+
+Solver ..> Rigid : main bodies pointer
+Solver ..> Force : main forces pointer
+
+Rigid ..> Force : Force pointer head
+Force ..> Rigid : Split link
+
+@enduml

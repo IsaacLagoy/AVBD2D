@@ -2,8 +2,8 @@ from shapes.mesh import Mesh
 from shapes.body_system import BodySystem
 import pygame
 import numpy as np
-from helper.maths import rotate, transform
 
+# TODO make mesh and scale property
 
 class Rigid():
     
@@ -17,19 +17,14 @@ class Rigid():
         self.next = self.solver.bodies
         self.solver.bodies = self
         
-        self.mesh = mesh
-        self.scale = scale
         self.color = color if color is not None else [0.5, 0.5, 0.5]
         
         # compute mass and moment TODO this is only correct for the basic cube mesh
         mass = scale[0] * scale[1] * density
         moment = mass * np.dot(scale, scale) / 12
         
-        # broad collision
-        self.radius = np.linalg.norm(scale)
-        
         # add self to body system
-        self.index = self.system.insert(pos, vel, friction, mass, moment)
+        self.index = self.system.insert(pos, vel, friction, mass, moment, scale, mesh.index)
         self.system.bodies[self.index] = self
         
         # start force linked list
@@ -37,8 +32,6 @@ class Rigid():
         
         # graph coloring
         self.reset_coloring()
-        
-        self.needs_mat_update = True
         
     # --------------------
     # Self Linked List Operations
@@ -200,29 +193,6 @@ class Rigid():
             to_update.append(adjacent_body)
             
         return to_update
-    
-    def project_vertices(self, dir):
-        dir = rotate(-self.pos[2], dir)
-        dir /= self.scale
-        
-        return np.dot(self.vertices, dir)
-    
-    def generate_private_mats(self) -> None:
-        self._rot_mat = np.array([
-            [np.cos(self.pos[2]), -np.sin(self.pos[2])],
-            [np.sin(self.pos[2]),  np.cos(self.pos[2])],
-        ], dtype='float32')
-        
-        self._sca_mat = np.array([
-            [self.scale[0], 0],
-            [0, self.scale[1]],
-        ], dtype='float32')
-        
-        # CORRECTED: This should be rot_mat @ sca_mat
-        self._rot_sca_mat = self._rot_mat @ self._sca_mat
-        
-        # CORRECTED: This should be the inverse of rot_sca_mat transposed
-        self._inv_rot_sca_mat = np.linalg.inv(self._rot_sca_mat)
         
     # --------------------
     # Properties
@@ -237,135 +207,67 @@ class Rigid():
     def vertices(self):
         return self.mesh.vertices
     
+    # TODO do manual transformation
     @property
     def trans_vertices(self):
-        verts = self.vertices @ (self.rot_mat @ self.sca_mat).T
+        verts = self.vertices @ np.linalg.inv(self.irs).T
         return verts + self.pos[:2]
-        
-    @property
-    def rot_sca_mat(self):
-        if self.needs_mat_update:
-            self.generate_private_mats()
-            self.needs_mat_update = False
-        
-        return self._rot_sca_mat
-    
-    @property
-    def rot_mat(self):
-        if self.needs_mat_update:
-            self.generate_private_mats()
-            self.needs_mat_update = False
-        
-        return self._rot_mat
-    
-    @property
-    def sca_mat(self):
-        if self.needs_mat_update:
-            self.generate_private_mats()
-            self.needs_mat_update = False
-        
-        return self._sca_mat
-    
-    @property
-    def inv_rot_sca_mat(self):
-        if self.needs_mat_update:
-            self.generate_private_mats()
-            self.needs_mat_update = False
-        
-        return self._inv_rot_sca_mat
     
     # --------------------
     # body system properties
     # --------------------
+    @property
+    def mesh(self) -> Mesh:
+        return self.solver.mesh_system.meshes[self.system.mesh[self.index]]
     
     @property
-    def xy(self):
-        return self.system.pos[self.index][:2]
+    def radius(self) -> float:
+        return self.system.radius[self.index]
     
-    @xy.setter
-    def xy(self, value):
-        self.update_vertices = True
-        self.system.pos[self.index][:2] = value
-        
     @property
-    def z(self):
-        return self.system.pos[self.index][2]
+    def irs(self):
+        return self.system.irs[self.index]
     
-    @z.setter
-    def z(self, value):
-        self.update_vertices = True
-        self.system.pos[self.index][2] = value
+    @property
+    def s_ir(self):
+        return self.system.s_ir[self.index]
+    
+    @property
+    def scale(self):
+        return self.system.scale[self.index]
         
     @property
     def updated(self):
         return self.system.updated[self.index]
     
-    @updated.setter
-    def updated(self, value):
-        self.update_vertices = True
-        self.system.updated[self.index] = value
-    
     @property
     def pos(self):
         return self.system.pos[self.index]
-    
-    @pos.setter
-    def pos(self, value):
-        self.update_vertices = True
-        self.system.pos[self.index][:] = value
         
     @property
     def initial(self):
         return self.system.initial[self.index]
-    
-    @initial.setter
-    def initial(self, value):
-        self.system.initial[self.index][:] = value
         
     @property
     def inertial(self):
         return self.system.inertial[self.index]
-    
-    @inertial.setter
-    def inertial(self, value):
-        self.system.inertial[self.index][:] = value
         
     @property
     def vel(self):
         return self.system.vel[self.index]
-    
-    @vel.setter
-    def vel(self, value):
-        self.system.vel[self.index][:] = value
         
     @property
     def prev_vel(self):
         return self.system.prev_vel[self.index]
-    
-    @prev_vel.setter
-    def prev_vel(self, value):
-        self.system.prev_vel[self.index][:] = value
         
     @property
     def friction(self):
         return self.system.friction[self.index]
-    
-    @friction.setter
-    def friction(self, value):
-        self.system.friction[self.index] = value
         
     @property
     def mass(self):
         return self.system.mass[self.index]
-    
-    @mass.setter
-    def mass(self, value):
-        self.system.mass[self.index] = value
         
     @property
     def moment(self):
         return self.system.moment[self.index]
-    
-    @moment.setter
-    def moment(self, value):
-        self.system.moment[self.index] = value

@@ -3,22 +3,11 @@ import numpy as np
 from helper.decorators import timer
 import numba as nb
 
+import numpy as np
+from numba import njit
 
-@timer('Collision', on=True)
-# @nb.njit(fastmath=True)
-def sat(pos_a, pos_b, irs_a, norms_a, s_b, ir_b, verts_b, dots_a):    
-    """This function runs a vectorized and optimized version of the Seperating Axis Theorem (SAT). This function only runs SAT from the perspective of the reference object, it will have to be run again with the arguments reversed to complete a full SAT. 
-
-    Args:
-        body_a (Rigid): This is the reference rigid body
-        body_b (Rigid): This is the incident rigid body
-
-    Returns:
-        row (int): This is the index of the normal used to find the minimum axis of penetration on body_a
-        col (int): This is the index of the most penetrating vertex on body_b
-        dots (np.ndarray): An array containing all of the dot products of body_b.vertices with body_a.normals[row]
-        delta_pos_minus_dot_a (float): dot products greater than this value are outside of body_a. 
-    """    
+@timer('Collision', on=False)
+def sat(pos_a, pos_b, irs_a, norms_a, s_ir_b, verts_b, dots_a):    
     # vector from A to B in world space
     delta_pos_world = pos_b[:2] - pos_a[:2]
 
@@ -35,7 +24,7 @@ def sat(pos_a, pos_b, irs_a, norms_a, s_b, ir_b, verts_b, dots_a):
     # subtract A's influence in each normal direction
     delta_pos_dots -= dots_a[fltrd_idcs] # contains the highest dot product of A's vertices with each of its normals in A's local space
 
-    mat = s_b @ ir_b @ irs_a.T
+    mat = s_ir_b @ irs_a.T
     
     # transform normals to be in b's local space but are scaled inversely. If A is larger then the dot product contribution should be proportionally less
     norms_r_sinv = fltrd_norms @ mat.T
@@ -78,8 +67,8 @@ def collide(manifold) -> bool:
     body_a: Rigid = manifold.body_a
     body_b: Rigid = manifold.body_b
     
-    data_a = sat(body_a.pos, body_b.pos, body_a.inv_rot_sca_mat, body_a.mesh.normals, body_a.sca_mat, np.linalg.inv(body_b.rot_mat), body_b.mesh.vertices, body_a.mesh.dots)
-    data_b = sat(body_b.pos, body_a.pos, body_b.inv_rot_sca_mat, body_b.mesh.normals, body_b.sca_mat, np.linalg.inv(body_a.rot_mat), body_a.mesh.vertices, body_b.mesh.dots)
+    data_a = sat(body_a.pos, body_b.pos, body_a.irs, body_a.mesh.normals, body_b.s_ir, body_b.mesh.vertices, body_a.mesh.dots)
+    data_b = sat(body_b.pos, body_a.pos, body_b.irs, body_b.mesh.normals, body_a.s_ir, body_a.mesh.vertices, body_b.mesh.dots)
     
     # check for no collision
     if data_a is None or data_b is None:
@@ -146,8 +135,6 @@ def collide(manifold) -> bool:
     # project to world space
     edge_verts = inc_mat @ edge_verts + incident.pos[:2] # pos[:2] is only x y translational
     edge_verts = np.linalg.inv(ref_mat) @ (edge_verts - reference.pos[:2])
-    
-    
     
     assert len(trans) == 2, f'Wrong number of contact edges: {len(trans)}'
     

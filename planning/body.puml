@@ -1,0 +1,31 @@
+@startuml body
+
+class Rigid {
+    color: 3x1
+}
+
+class BodySystem {
+    pos: 3x1
+    ---
+    initial: 3x1
+    ---
+    inertial: 3x1
+    ---
+    vel: 3x1
+    ---
+    prev_vel: 3x1
+    ---
+    friction: float
+    ---
+    mass: float
+    ---
+    moment: float
+    ---
+    scale: 2x1
+    ---
+    radius: float
+}
+
+Rigid ..> BodySystem : index
+
+@enduml

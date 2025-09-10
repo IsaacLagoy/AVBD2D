@@ -1,0 +1,17 @@
+@startuml mesh
+
+class Mesh {
+
+}
+
+class MeshSystem {
+    vertices: 2x1[n]
+    normals: 2x1[n]
+    dots: float[n]
+    start: float
+    length: float
+}
+
+Mesh ..> MeshSystem : index
+
+@enduml
