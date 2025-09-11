@@ -24,6 +24,11 @@ class ContactSystem():
         self.JBt = np.zeros((max_contacts, CONTACTS, 3), dtype='float32')     # vec3
         self.C0 = np.zeros((max_contacts, CONTACTS, 2), dtype='float32')      # vec2
         
+        # simplex
+        self.index_a = np.zeros((max_contacts, 4), dtype='int16')
+        self.index_b = np.zeros((max_contacts, 4), dtype='int16')
+        self.minkowski = np.zeros((max_contacts, 4, 3), dtype='float32') # minkowski space differences
+        
         # manifold variables
         self.num_contact = np.zeros(max_contacts, dtype='int16') # only 0 - CONTACTS
         self.friction = np.zeros(max_contacts, dtype='float32')

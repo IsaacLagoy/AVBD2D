@@ -3,6 +3,7 @@ from helper.constants import ROWS, DEBUG_TIMING
 from helper.decorators import timer
 from forces.contact_system import ContactSystem
 from collision.collide import sat
+from collision.gjk import gjk
 from shapes.rigid import Rigid
 
 
@@ -78,18 +79,26 @@ class ForceSystem():
         fltrd_norms_buf = np.empty((n_normals, 2))
         norms_r_sinv_buf = np.empty((n_normals, 2))
         r_sinv_dots_buf = np.empty((n_normals, n_verts))
+        
+        index_a = np.empty(3, dtype='int16')
+        index_b = np.empty(3, dtype='int16')
+        minks = np.empty((3, 2), dtype='float32')
 
         for i, j in self.pairs:
-            data_a = sat(pos[i], pos[j], irs[i], normals, s_ir[j], vertices, dots)
+            collided = gjk(
+                pos_a = self.body_system.pos[i],
+                pos_b = self.body_system.pos[j],
+                sr_a = np.linalg.inv(self.body_system.irs[i]),
+                sr_b = np.linalg.inv(self.body_system.irs[j]),
+                verts_a = vertices,
+                verts_b = vertices,
+                index_a = index_a,
+                index_b = index_b,
+                minks = minks,
+                free = 0
+            )
             
-            # check for no collision
-            if data_a is None:
-                continue
-            
-            data_b = sat(pos[j], pos[i], irs[j], normals, s_ir[i], vertices, dots)
-            
-            # check for no collision
-            if data_b is None:
+            if not collided:
                 continue
             
             self.body_system.bodies[i].color = (255, 0, 0)
