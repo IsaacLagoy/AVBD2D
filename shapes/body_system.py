@@ -91,7 +91,7 @@ class BodySystem():
         self.moment[index]   = moment
         
         self.scale[index] = [i for i in scale]
-        self.radius[index] = np.linalg.norm(self.scale[index])
+        self.radius[index] = np.linalg.norm(self.scale[index]) * 0.5
         
         self.mesh[index] = mesh_idx
         

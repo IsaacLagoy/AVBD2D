@@ -3,7 +3,7 @@ from helper.constants import ROWS, DEBUG_TIMING
 from helper.decorators import timer
 from forces.contact_system import ContactSystem
 from collision.collide import sat
-from collision.gjk import gjk
+from collision.gjk import gjk, epa
 from shapes.rigid import Rigid
 
 
@@ -74,22 +74,24 @@ class ForceSystem():
         
         n_normals = normals.shape[0]
         n_verts = vertices.shape[0]
-
-        fltrd_idcs_buf = np.empty(n_normals, dtype=np.int32)
-        fltrd_norms_buf = np.empty((n_normals, 2))
-        norms_r_sinv_buf = np.empty((n_normals, 2))
-        r_sinv_dots_buf = np.empty((n_normals, n_verts))
         
         index_a = np.empty(3, dtype='int16')
         index_b = np.empty(3, dtype='int16')
         minks = np.empty((3, 2), dtype='float32')
+        
+        # update to fit number of iterations - 3 from gjk
+        support_buffer = np.empty((15, 2), dtype='float32')
+        normal_buffer = np.empty((15, 2), dtype='float32')
+        face_buffer = np.empty((15, 2), dtype='uint8')
+        distance_buffer = np.empty(15, dtype='float32')
+        set_buffer = np.empty(15, dtype='uint8')
 
         for i, j in self.pairs:
             collided = gjk(
                 pos_a = self.body_system.pos[i],
                 pos_b = self.body_system.pos[j],
-                sr_a = np.linalg.inv(self.body_system.irs[i]),
-                sr_b = np.linalg.inv(self.body_system.irs[j]),
+                sr_a = self.body_system.irs[i],
+                sr_b = self.body_system.irs[j],
                 verts_a = vertices,
                 verts_b = vertices,
                 index_a = index_a,
@@ -103,6 +105,24 @@ class ForceSystem():
             
             self.body_system.bodies[i].color = (255, 0, 0)
             self.body_system.bodies[j].color = (255, 0, 0)
+            
+            mtv = epa(
+                pos_a = self.body_system.pos[i],
+                pos_b = self.body_system.pos[j],
+                sr_a = self.body_system.irs[i],
+                sr_b = self.body_system.irs[j],
+                verts_a = vertices,
+                verts_b = vertices,
+                simplex = minks,
+                faces = face_buffer,
+                sps = support_buffer,
+                normals = normal_buffer,
+                dists = distance_buffer,
+                set = set_buffer
+            )
+            
+            # self.body_system.pos[i, :2] -= mtv / 2
+            # self.body_system.pos[j, :2] += mtv / 2
         
     def insert(self, type: int) -> int:
         """

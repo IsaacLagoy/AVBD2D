@@ -210,7 +210,7 @@ class Rigid():
     # TODO do manual transformation
     @property
     def trans_vertices(self):
-        verts = self.vertices @ np.linalg.inv(self.irs).T
+        verts = self.vertices @ self.irs.T
         return verts + self.pos[:2]
     
     # --------------------

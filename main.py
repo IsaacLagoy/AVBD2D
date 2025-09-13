@@ -53,17 +53,21 @@ def main():
     # Rigid(solver.body_system, cube_mesh, vec3(15.5, 2, 0), vec2(0.75, 5), color=vec3(0.4, 0.4, 0.4), density=-1)
     # Rigid(solver.body_system, cube_mesh, vec3(-15.5, 2, 0), vec2(0.75, 5), color=vec3(0.4, 0.4, 0.4), density=-1)
     
-    dx = 0
-    dr = 0
-    smin = 0.5
-    smax = 2.5
+    dx = 10
+    dr = 2
+    sminx = 0.5
+    smaxx = 2.5
+    sminy = 0.5
+    smaxy = 2.5
+    
+    c = 5
     
     # add random bodies
-    for x in range(-5, 5):
-        for y in range(-5, 5):
+    for x in range(-c, c):
+        for y in range(-c, c):
             Rigid(solver.body_system, cube_mesh, 
-                vec3(x * 2, y * 2, x * y) + vec3(uniform(-dx, dx), uniform(-dx, dx), uniform(0, dr)), 
-                vec2(1, 2), 
+                vec3(uniform(-dx, dx), uniform(-dx, dx), uniform(0, dr)), 
+                vec2(uniform(sminx, smaxx), uniform(sminy, smaxy)), 
                 color=vec3(0, 0, 1),  # Default color, will be updated by coloring
                 density=1)
     

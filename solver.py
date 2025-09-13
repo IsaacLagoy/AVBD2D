@@ -235,10 +235,6 @@ class Solver:
             c = math.cos(angle)
             s = math.sin(angle)
             
-            # Compute inverse scale values
-            inv_sx = 1.0 / sx
-            inv_sy = 1.0 / sy
-            
             # s_ir = scale @ inv(rotation)
             s_ir[i, 0, 0] = sx * c
             s_ir[i, 0, 1] = sx * s
@@ -246,10 +242,10 @@ class Solver:
             s_ir[i, 1, 1] = sy * c
             
             # irs = inv(rotation @ scale)
-            irs[i, 0, 0] = c * inv_sx
-            irs[i, 0, 1] = s * inv_sx
-            irs[i, 1, 0] = -s * inv_sy
-            irs[i, 1, 1] = c * inv_sy
+            irs[i, 0, 0] = c * sx
+            irs[i, 0, 1] = -s * sy
+            irs[i, 1, 0] = s * sx
+            irs[i, 1, 1] = c * sy
                     
     # ------------------------------------
     # Force Warmstart
