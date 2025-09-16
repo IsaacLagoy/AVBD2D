@@ -88,6 +88,41 @@ class ContactSystem():
         return index
         # TODO Contact needs to add itself to the contacts list
         
+    def reserve_space(self, spaces: int) -> None:
+        """
+        NOTE the contact system needs to be compacted before this function is called
+        """
+        remaining = self.max_contacts - self.size
+        
+        # we have enough space already
+        if remaining >= spaces:
+            return
+        
+        # expand to support new points
+        # calculate needed size
+        space_needed = 2 ** int(np.ceil(np.log2(spaces + self.size)))
+        free_space = space_needed - self.size
+        
+        # expand arrays to fit the needed space
+        self.normal = np.vstack([self.normal, np.zeros((free_space, CONTACTS, 2), dtype='float32')])
+        self.rA = np.vstack([self.rA, np.zeros((free_space, CONTACTS, 2), dtype='float32')])
+        self.rB = np.vstack([self.rB, np.zeros((free_space, CONTACTS, 2), dtype='float32')])
+        self.stick = np.vstack([self.stick, np.zeros((free_space, CONTACTS), dtype=bool)])
+        
+        self.JAn = np.vstack([self.JAn, np.zeros((free_space, CONTACTS, 3), dtype='float32')])
+        self.JBn = np.vstack([self.JBn, np.zeros((free_space, CONTACTS, 3), dtype='float32')])
+        self.JAt = np.vstack([self.JAt, np.zeros((free_space, CONTACTS, 3), dtype='float32')])
+        self.JBt = np.vstack([self.JBt, np.zeros((free_space, CONTACTS, 3), dtype='float32')])
+        self.C0 = np.vstack([self.C0, np.zeros((free_space, CONTACTS, 2), dtype='float32')])
+        
+        self.num_contact = np.hstack([self.num_contact, np.zeros(free_space, dtype='int16')])
+        self.friction = np.hstack([self.friction, np.zeros(free_space, dtype='float32')])
+        
+        # add new free indices
+        self.free_indices.update(range(self.max_contacts, space_needed))
+        
+        self.max_contacts = space_needed
+        
     def delete(self, index) -> None:
         if index in self.contacts:
             del self.contacts[index]

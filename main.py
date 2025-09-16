@@ -53,8 +53,8 @@ def main():
     # Rigid(solver.body_system, cube_mesh, vec3(15.5, 2, 0), vec2(0.75, 5), color=vec3(0.4, 0.4, 0.4), density=-1)
     # Rigid(solver.body_system, cube_mesh, vec3(-15.5, 2, 0), vec2(0.75, 5), color=vec3(0.4, 0.4, 0.4), density=-1)
     
-    dx = 10
-    dr = 2
+    dx = 15
+    dr = 3.14
     sminx = 0.5
     smaxx = 2.5
     sminy = 0.5

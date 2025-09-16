@@ -2,6 +2,16 @@ import numpy as np
 import numba as nb
 
 @nb.njit(inline='always', fastmath=True)
+def clamp(i, low, high):
+    if i < low:
+        return low
+    
+    if i > high:
+        return high
+    
+    return i
+
+@nb.njit(inline='always', fastmath=True)
 def dot(a: np.ndarray, b: np.ndarray) -> np.float32:
     return a[0] * b[0] + a[1] * b[1]
 
@@ -32,3 +42,51 @@ def transform(pos, sr_mat, verts, idx):
     Transforms a given point into world space
     """
     return mat_x_vec(sr_mat, verts[idx]) + pos[:2]
+
+@nb.njit(inline='always', fastmath=True)
+def transform_direct(pos, sr_mat, vert):
+    """
+    Transforms a given point into world space
+    """
+    return mat_x_vec(sr_mat, vert) + pos[:2]
+
+@nb.njit(inline='always', fastmath=True)
+def get_far(verts, dir):
+    """
+    Finds the index of the vertex with the highest dot product with dir
+    """
+    cur = 0
+    here = dot(dir, verts[0])
+    
+    # pick search direction
+    roll = dot(dir, verts[-1])
+    right = dot(dir, verts[1])
+    
+    # early out, already found best index
+    if here > roll and here > right:
+        return cur
+    
+    l_less = len(verts) - 1
+    
+    if roll > right:
+        walk = -1
+        cur = l_less
+        here = roll
+    else:
+        walk = 1
+        cur = 1
+        here = right
+        
+    # walk until we find a worse vertex
+    while 0 <= cur <= l_less:
+        next_idx = cur + walk
+        if not (0 <= next_idx <= l_less):
+            return cur  # hit the boundary, must be max
+        next_dot = dot(dir, verts[next_idx])
+        if next_dot < here:
+            return cur
+        cur = next_idx
+        here = next_dot
+
+        
+    return cur

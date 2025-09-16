@@ -4,7 +4,7 @@ from shapes.rigid import Rigid
 from forces.force import Force
 from forces.manifold import Manifold
 import time
-from linalg.ldlt import solve, solve_glm
+from linalg.ldlt import solve
 from helper.constants import DEBUG_TIMING, PENALTY_MAX, PENALTY_MIN
 from helper.decorators import timer
 from shapes.body_system import BodySystem
@@ -177,12 +177,15 @@ class Solver:
         rsum2 = (radii[:, None] + radii[None, :])**2
 
         table = rsum2 - dist2
+        
+        count = 0 # TODO debug remove
 
         overlaps = np.argwhere(table > 0)
         for i, j in overlaps:
             if i < j:  # optional: only handle each pair once
-                # count += 1
                 self.force_system.pairs.append((i, j))
+                
+                count += 1
                 
         # convert pairs to numpy array
         self.force_system.pairs = np.array(self.force_system.pairs)
@@ -199,6 +202,9 @@ class Solver:
             keeps[index] = 0
             
         self.force_system.pairs = self.force_system.pairs[keeps]
+        
+        print(self.body_system.size ** 2)
+        print(count)
         
     # --------------------
     # Narrow Collision
@@ -231,21 +237,24 @@ class Solver:
             sx = scale[i, 0]
             sy = scale[i, 1]
             
+            isx = 1 / sx
+            isy = 1 / sy
+            
             # Compute trigonometric values
             c = math.cos(angle)
             s = math.sin(angle)
             
-            # s_ir = scale @ inv(rotation)
-            s_ir[i, 0, 0] = sx * c
-            s_ir[i, 0, 1] = sx * s
-            s_ir[i, 1, 0] = -sy * s
-            s_ir[i, 1, 1] = sy * c
+            # isr TODO rename to fit usage
+            s_ir[i, 0, 0] =  isx * c
+            s_ir[i, 0, 1] =  isx * s
+            s_ir[i, 1, 0] = -isy * s
+            s_ir[i, 1, 1] =  isy * c
             
-            # irs = inv(rotation @ scale)
-            irs[i, 0, 0] = c * sx
+            # scale rotate TODO rename to fit usage
+            irs[i, 0, 0] =  c * sx
             irs[i, 0, 1] = -s * sy
-            irs[i, 1, 0] = s * sx
-            irs[i, 1, 1] = c * sy
+            irs[i, 1, 0] =  s * sx
+            irs[i, 1, 1] =  c * sy
                     
     # ------------------------------------
     # Force Warmstart

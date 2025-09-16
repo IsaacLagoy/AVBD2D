@@ -2,8 +2,7 @@ import numpy as np
 from helper.constants import ROWS, DEBUG_TIMING
 from helper.decorators import timer
 from forces.contact_system import ContactSystem
-from collision.collide import sat
-from collision.gjk import gjk, epa
+from collision.collide import collide
 from shapes.rigid import Rigid
 
 
@@ -50,79 +49,41 @@ class ForceSystem():
         self.pairs = []
         
     def collide(self) -> None:
-        # early terminate
-        if len(self.pairs) == 0:
-            return
-        
-        # NOTE ideas
-        # allocate enough space for the largest SAT
-        # allocate temp arrays for SAT
-        # find a better way of accessing the data from each body and mesh
-        # 2-3 ms to get info
-        
-        pos = self.body_system.pos
-        irs = self.body_system.irs
-        s_ir = self.body_system.s_ir
-        
-        # TODO find a smarter way to do this with multiple meshes
         mesh_system = self.solver.mesh_system
         
-        mesh = self.solver.mesh_system.meshes[0]
-        normals = mesh.normals
-        vertices = mesh.vertices
-        dots = mesh.dots
+        num_pairs = len(self.pairs)
         
-        n_normals = normals.shape[0]
-        n_verts = vertices.shape[0]
+        # reserve enough space for the collisions and get slice
+        self.contacts.reserve_space(num_pairs)
+        normal_slice = self.contacts.normal[self.contacts.size : self.contacts.size + num_pairs]
+        rA_slice = self.contacts.rA[self.contacts.size : self.contacts.size + num_pairs]
+        rB_slice = self.contacts.rB[self.contacts.size : self.contacts.size + num_pairs]
+        contact_slice = self.contacts.num_contact[self.contacts.size : self.contacts.size + num_pairs]
         
-        index_a = np.empty(3, dtype='int16')
-        index_b = np.empty(3, dtype='int16')
-        minks = np.empty((3, 2), dtype='float32')
+        collide(
+            self.pairs, 
+            mesh_system.vertices, 
+            mesh_system.starts, 
+            mesh_system.lengths, 
+            self.body_system.pos, 
+            self.body_system.irs, 
+            self.body_system.s_ir,
+            self.body_system.mesh,
+            normal_slice,
+            rA_slice,
+            rB_slice,
+            contact_slice
+        )
         
-        # update to fit number of iterations - 3 from gjk
-        support_buffer = np.empty((15, 2), dtype='float32')
-        normal_buffer = np.empty((15, 2), dtype='float32')
-        face_buffer = np.empty((15, 2), dtype='uint8')
-        distance_buffer = np.empty(15, dtype='float32')
-        set_buffer = np.empty(15, dtype='uint8')
-
-        for i, j in self.pairs:
-            collided = gjk(
-                pos_a = self.body_system.pos[i],
-                pos_b = self.body_system.pos[j],
-                sr_a = self.body_system.irs[i],
-                sr_b = self.body_system.irs[j],
-                verts_a = vertices,
-                verts_b = vertices,
-                index_a = index_a,
-                index_b = index_b,
-                minks = minks,
-                free = 0
-            )
-            
-            if not collided:
+        for i in range(num_pairs):
+            if contact_slice[i] == 0:
                 continue
             
-            self.body_system.bodies[i].color = (255, 0, 0)
-            self.body_system.bodies[j].color = (255, 0, 0)
+            a = self.body_system.bodies[self.pairs[i, 0]]
+            b = self.body_system.bodies[self.pairs[i, 1]]
             
-            mtv = epa(
-                pos_a = self.body_system.pos[i],
-                pos_b = self.body_system.pos[j],
-                sr_a = self.body_system.irs[i],
-                sr_b = self.body_system.irs[j],
-                verts_a = vertices,
-                verts_b = vertices,
-                simplex = minks,
-                faces = face_buffer,
-                sps = support_buffer,
-                normals = normal_buffer,
-                dists = distance_buffer,
-                set = set_buffer
-            )
-            
-            # self.body_system.pos[i, :2] -= mtv / 2
-            # self.body_system.pos[j, :2] += mtv / 2
+            a.color = (255, 0, 0)
+            b.color = (255, 0, 0)
         
     def insert(self, type: int) -> int:
         """
