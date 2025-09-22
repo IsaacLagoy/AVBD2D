@@ -118,10 +118,11 @@ class ContactSystem():
         self.num_contact = np.hstack([self.num_contact, np.zeros(free_space, dtype='int16')])
         self.friction = np.hstack([self.friction, np.zeros(free_space, dtype='float32')])
         
-        # add new free indices
-        self.free_indices.update(range(self.max_contacts, space_needed))
-        
+        # add new free indices, assume reserved space is going to be filled
+        self.free_indices.update(range(self.max_contacts + spaces, space_needed))
         self.max_contacts = space_needed
+        
+        print('Max Contacts', self.max_contacts)
         
     def delete(self, index) -> None:
         if index in self.contacts:

@@ -93,7 +93,7 @@ def main():
             pygame.display.set_caption(title)
             fps_timer = 0
         
-        # Update graph coloring periodically
+        # # Update graph coloring periodically
         # coloring_timer += dt
         # if coloring_timer >= coloring_interval:
         #     chromatic_number = update_body_colors(solver)
@@ -104,6 +104,8 @@ def main():
             
         # step physics
         solver.step(max(dt, 1e-4))
+        
+        print('Forces', len(solver.force_system.forces))
         
         # draw
         screen.fill((30, 30, 30))

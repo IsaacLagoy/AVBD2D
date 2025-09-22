@@ -6,40 +6,52 @@ from collision.helper import transform, transform_direct, dot, mat_x_vec, clamp
 # TODO create idcs and world buffers externally
 # TODO pass contact rA and rB as reference
 @nb.njit(fastmath=True)
-def sat(pos_a, pos_b, rs_a, rs_b, irs_a, irs_b, verts_a, verts_b, mtv, idcs, world, rA, rB):
+def sat(pos_a, pos_b, rs_a, rs_b, ir_a, ir_b, verts_a, verts_b, mtv, idcs, world, rA, rB):
     """
     Returns the starting indices of each edge 
     mtv should be normalized
     """
-    # get the MTV in local space
-    mtv_la = mat_x_vec(rs_a.T, mtv)
-    mtv_lb = mat_x_vec(rs_b.T, mtv)
     
-    dots_a = np.dot(verts_a, mtv_la)
-    dots_b = np.dot(verts_b, mtv_lb)
+    # print('-------- SAT ---------')
     
-    dx = pos_b[:2] - pos_a[:2]
+    # # get the MTV in local space
+    # mtv_la = mat_x_vec(rs_a.T, mtv)
+    # mtv_lb = mat_x_vec(rs_b.T, mtv)
     
-    # determine which object is the reference
-    if dot(dx, mtv) >= 0:
-        # reference is a
-        dx = mat_x_vec(irs_a, dx)
-        dots_a += dx
-        # intersect(pos_a, rs_a, verts_a, dots_a, pos_b, rs_b, verts_b, dots_b, mtv, idcs, world, rA, rB)
+    t_verts_a = np.empty((len(verts_a), 2), dtype='float32')
+    for i in range(len(verts_a)):
+        t_verts_a[i] = mat_x_vec(rs_a, verts_a[i]) + pos_a[:2]
+    
+    t_verts_b = np.empty((len(verts_b), 2), dtype='float32')
+    for i in range(len(verts_b)):
+        t_verts_b[i] = mat_x_vec(rs_b, verts_b[i]) + pos_b[:2]
+    
+    # take the dot product of all vertices with their "local" vector
+    dots_a = np.empty(len(verts_a), dtype='float32')
+    for i in range(len(verts_a)):
+        dots_a[i] = dot(t_verts_a[i], mtv)
         
-    else: 
-        # reference is b
-        dx = mat_x_vec(irs_b, -dx)
-        dots_b += dx
-        # intersect(pos_b, rs_b, verts_b, dots_b, pos_a, rs_a, verts_a, dots_a, mtv, idcs, world, rB, rA)
+    dots_b = np.empty(len(verts_b), dtype='float32')
+    for i in range(len(verts_b)):
+        dots_b[i] = dot(t_verts_b[i], mtv)
+    
+    # # should point in direction of mtv
+    # dx = pos_b[:2] - pos_a[:2] # NOTE because of checked EPA output, dx dot mtv is always negative
+    
+    # # reference is A
+    # dx = mat_x_vec(ir_a, dx)
+    # dx = dot(dx, mtv)
+    # dots_b += dx
+    
+    intersect(pos_b, rs_b, t_verts_b, dots_b, pos_a, rs_a, t_verts_a, dots_a, mtv, idcs, world, rB, rA)
        
-@nb.njit(fastmath=True)
+@nb.njit(fastmath=True, inline='always')
 def intersect(pos_ref, rs_ref, verts_ref, dots_ref, pos_inc, rs_inc, verts_inc, dots_inc, mtv, idcs, world, r_ref, r_inc):
     # idcs breakdown
-    # max ref - [0, 1]
-    # bnd ref - [2, 3]
-    # min inc - [4, 5]
-    # bnd inc - [6, 7]
+    # max      ref - [0, 1]
+    # edg strt ref - [2, 3]
+    # min      inc - [4, 5]
+    # edg strt inc - [6, 7]
     
     # worlds breakdown
     # 0 - ref enter edge
@@ -52,35 +64,64 @@ def intersect(pos_ref, rs_ref, verts_ref, dots_ref, pos_inc, rs_inc, verts_inc, 
     # 6 - inc min start
     # 7 - inc min end
     
+    # rules
+    # [2, 3] and [6, 7] cannot be the same! Degenerate
+    
+    print('Dots Ref')
+    print(dots_ref)
+    print('Dots Inc')
+    print(dots_inc)
+    
     # find extreme values
     max_ref = find_maxs(dots_ref, idcs[:2])
     min_inc = find_mins(dots_inc, idcs[4:6])
+    
+    print('(inc above) (ref below) thresh')
+    print(max_ref, min_inc)
     
     # find bounding values
     find_max_bounds(dots_ref, idcs[2:4], min_inc)
     find_min_bounds(dots_inc, idcs[6:8], max_ref)
     
     # find all local space edge intersections
-    world[0] = dot_edge_intersect(idcs[2], verts_ref, dots_ref, min_inc, mtv)
-    world[1] = dot_edge_intersect(idcs[3], verts_ref, dots_ref, min_inc, mtv)
-    world[4] = dot_edge_intersect(idcs[6], verts_inc, dots_inc, max_ref, mtv)
-    world[5] = dot_edge_intersect(idcs[7], verts_inc, dots_inc, max_ref, mtv)
+    if idcs[2] != idcs[3]:
+        world[0] = dot_edge_intersect(idcs[2], verts_ref, dots_ref, min_inc, mtv)
+        world[1] = dot_edge_intersect(idcs[3], verts_ref, dots_ref, min_inc, mtv)
+    else:
+        world[0] = verts_ref[idcs[2]]
+        world[1] = verts_ref[idcs[3]]
+    
+    if idcs[6] != idcs[7]:
+        world[4] = dot_edge_intersect(idcs[6], verts_inc, dots_inc, max_ref, mtv)
+        world[5] = dot_edge_intersect(idcs[7], verts_inc, dots_inc, max_ref, mtv)
+    else:
+        world[4] = verts_ref[idcs[6]]
+        world[5] = verts_ref[idcs[7]]
+        
+    # clamp is it is a non-inclusive collision
+    if idcs[2] != idcs[3]:
+        edge_clamp(world[0:2], world[6:8]) # clamp min inc to edge ref
+        
+    if idcs[6] != idcs[7]:
+        edge_clamp(world[4:6], world[2:4]) # clamp max ref to edge inc
     
     # convert all points to worlds space
-    transform_quad(rs_ref, pos_ref, world[:4], verts_ref, idcs[:4])
-    transform_quad(rs_inc, pos_inc, world[4:], verts_inc, idcs[4:])
-    
-    # clamp max contacts to edges
-    edge_clamp(world[4:6], world[0:2])
-    edge_clamp(world[0:2], world[6:8])
+    # transform_quad(rs_ref, pos_ref, world[:4], verts_ref, idcs[:4])
+    # transform_quad(rs_inc, pos_inc, world[4:], verts_inc, idcs[4:])
+
+    # print('clamp done')
     
     # add contacts to r lists
     # TODO check contact ordering
-    r_ref[0] = world[0]
-    r_inc[0] = world[7]
+    r_rs_inv = np.linalg.inv(rs_ref)
+    i_rs_inv = np.linalg.inv(rs_inc)
     
-    r_ref[1] = world[1]
-    r_inc[1] = world[6]
+    r_ref[0] = mat_x_vec(r_rs_inv, world[2] - pos_ref[:2]) 
+    r_ref[1] = mat_x_vec(r_rs_inv, world[3] - pos_ref[:2])
+    
+    r_inc[0] = mat_x_vec(i_rs_inv, world[7] - pos_inc[:2])
+    r_inc[1] = mat_x_vec(i_rs_inv, world[6] - pos_inc[:2])
+    
     
 @nb.njit(fastmath=True, inline='always')
 def transform_quad(rs, pos, worlds, verts, idcs):
@@ -100,6 +141,10 @@ def edge_clamp(e, m):
     """
     Clamp the segment m0, m1 to e0, e1
     """
+    # print('clamping')
+    # print(e)
+    # print(m)
+    
     v = e[1] - e[0]
     vv = dot(v, v)
     
@@ -129,6 +174,11 @@ def dot_edge_intersect(start, verts, dots, thresh, mtv):
     
     l1 = dots[start]
     l2 = dots[end]
+    
+    # print(l1, l2, start, end)
+    # print(dots)
+    # print(verts)
+    # print(mtv)
     
     t = (thresh - l1) / (l2 - l1)
     
@@ -199,7 +249,7 @@ def find_max_bounds(arr, idcs, thresh) -> None:
             
     # edge case - end is at 0 [----++++]
     if not end_found:
-        idcs[3] = l - 1
+        idcs[1] = l - 1
         
     # edge case - beginning is at 0 [++++----]
     # element before begin is -1 
@@ -269,7 +319,7 @@ def find_min_bounds(arr, idcs, thresh) -> None:
             
     # edge case - end is at 0 [----++++]
     if not end_found:
-        idcs[3] = l - 1
+        idcs[1] = l - 1
         
     # edge case - beginning is at 0 [++++----]
     # element before begin is -1 

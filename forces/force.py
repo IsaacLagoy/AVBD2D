@@ -1,11 +1,10 @@
-from forces.force_system import ForceSystem
 from shapes.rigid import Rigid
 from helper.constants import ROWS
 
 
 class Force():
     
-    def __init__(self, system: ForceSystem, body_a: Rigid, body_b: Rigid, type: int) -> None:
+    def __init__(self, system, body_a: Rigid, body_b: Rigid, type: int) -> None:
         self.system = system
         
         # initiate linked lists

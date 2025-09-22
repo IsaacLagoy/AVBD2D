@@ -4,6 +4,7 @@ from helper.decorators import timer
 from forces.contact_system import ContactSystem
 from collision.collide import collide
 from shapes.rigid import Rigid
+from forces.manifold import Manifold
 
 
 STICK_THRESH = 0.001
@@ -49,9 +50,13 @@ class ForceSystem():
         self.pairs = []
         
     def collide(self) -> None:
+        # TODO make this a property
         mesh_system = self.solver.mesh_system
         
+        # stop if there is nothing to do
         num_pairs = len(self.pairs)
+        if num_pairs == 0:
+            return
         
         # reserve enough space for the collisions and get slice
         self.contacts.reserve_space(num_pairs)
@@ -59,6 +64,8 @@ class ForceSystem():
         rA_slice = self.contacts.rA[self.contacts.size : self.contacts.size + num_pairs]
         rB_slice = self.contacts.rB[self.contacts.size : self.contacts.size + num_pairs]
         contact_slice = self.contacts.num_contact[self.contacts.size : self.contacts.size + num_pairs]
+        
+        print('contact data', self.contacts.size, num_pairs)
         
         collide(
             self.pairs, 
@@ -84,6 +91,18 @@ class ForceSystem():
             
             a.color = (255, 0, 0)
             b.color = (255, 0, 0)
+            
+            Manifold(self, a, b, i)
+            
+        for i in range(num_pairs):
+            if contact_slice[i] != 1:
+                continue
+            
+            a = self.body_system.bodies[self.pairs[i, 0]]
+            b = self.body_system.bodies[self.pairs[i, 1]]
+            
+            a.color = (0, 255, 0)
+            b.color = (0, 255, 0)
         
     def insert(self, type: int) -> int:
         """

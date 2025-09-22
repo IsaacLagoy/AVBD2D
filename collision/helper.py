@@ -22,8 +22,8 @@ def triple_product(a, b, c):
 @nb.njit(inline='always', fastmath=True)
 def mat_x_vec(m, v):
     return np.array([
-        m[0][0] * v[0] + m[0][1] * v[1],
-        m[1][0] * v[0] + m[1][1] * v[1],
+        m[0, 0] * v[0] + m[0, 1] * v[1],
+        m[1, 0] * v[0] + m[1, 1] * v[1],
     ], dtype='float32')
     
 @nb.njit(inline='always', fastmath=True)

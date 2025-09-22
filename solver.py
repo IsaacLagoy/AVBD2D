@@ -70,72 +70,72 @@ class Solver:
         
         self.spherical_broad_collision()
         self.collide()
-        self.warmstart_forces()
-        self.warmstart_bodies(dt)
+        # self.warmstart_forces()
+        # self.warmstart_bodies(dt)
         
-        start_color = time.perf_counter()
-        # color rigid bodies
-        self.colors = dsatur_coloring(self)
+        # start_color = time.perf_counter()
+        # # color rigid bodies
+        # self.colors = dsatur_coloring(self)
 
-        for color in self.colors:
-            color.reserve_space()
+        # for color in self.colors:
+        #     color.reserve_space()
             
-        print(f'Graph Coloring: {(time.perf_counter() - start_color) * 1000:.3f}ms')
+        # print(f'Graph Coloring: {(time.perf_counter() - start_color) * 1000:.3f}ms')
             
-        inv_dt2 = 1 / (dt * dt)
+        # inv_dt2 = 1 / (dt * dt)
         
         # main solver loop
-        for iteration in range(self.iterations):
+        # for iteration in range(self.iterations):
             
-            start_primal = time.perf_counter()
+        #     start_primal = time.perf_counter()
             
-            # primal update
-            for color in self.colors:
-                if color.count == 0:
-                    continue
+        #     # primal update
+        #     for color in self.colors:
+        #         if color.count == 0:
+        #             continue
                 
-                # LHS/RHS (Eqs. 5,6)
-                color.lhs[:, 0, 0] = self.body_system.mass[color.indices]
-                color.lhs[:, 1, 1] = self.body_system.mass[color.indices]  
-                color.lhs[:, 2, 2] = self.body_system.moment[color.indices]
-                color.lhs *= inv_dt2
+        #         # LHS/RHS (Eqs. 5,6)
+        #         color.lhs[:, 0, 0] = self.body_system.mass[color.indices]
+        #         color.lhs[:, 1, 1] = self.body_system.mass[color.indices]  
+        #         color.lhs[:, 2, 2] = self.body_system.moment[color.indices]
+        #         color.lhs *= inv_dt2
 
-                color.rhs = np.einsum('bij,bj->bi', color.lhs, self.body_system.pos[color.indices] - self.body_system.inertial[color.indices])
+        #         color.rhs = np.einsum('bij,bj->bi', color.lhs, self.body_system.pos[color.indices] - self.body_system.inertial[color.indices])
         
-                # TODO primal update each body in the color
+        #         # TODO primal update each body in the color
                 
-            print(f'Primal Update: {(time.perf_counter() - start_primal) * 1000:.3f}ms')
+        #     print(f'Primal Update: {(time.perf_counter() - start_primal) * 1000:.3f}ms')
                 
-            # --------------------
-            # Dual update
-            # --------------------
+        #     # --------------------
+        #     # Dual update
+        #     # --------------------
                 
-            for force in self.get_forces_iterator():
-                force.computeConstraint(self.alpha)
+        #     for force in self.get_forces_iterator():
+        #         force.computeConstraint(self.alpha)
             
-            # Eq. 11 (do not include motors in dual update)
-            self.force_system.lamb = np.clip(self.force_system.penalty * self.force_system.C + np.where(np.isinf(self.force_system.stiffness), self.force_system.lamb, 0.0), self.force_system.fmin, self.force_system.fmax)
+        #     # Eq. 11 (do not include motors in dual update)
+        #     self.force_system.lamb = np.clip(self.force_system.penalty * self.force_system.C + np.where(np.isinf(self.force_system.stiffness), self.force_system.lamb, 0.0), self.force_system.fmin, self.force_system.fmax)
             
-            # fracture
-            mask = np.any(np.abs(self.force_system.lamb) >= self.force_system.fracture, axis=1)
-            self.force_system.stiffness[mask, :] = 0
-            self.force_system.penalty[mask, :]   = 0
-            self.force_system.lamb[mask, :]      = 0
+        #     # fracture
+        #     mask = np.any(np.abs(self.force_system.lamb) >= self.force_system.fracture, axis=1)
+        #     self.force_system.stiffness[mask, :] = 0
+        #     self.force_system.penalty[mask, :]   = 0
+        #     self.force_system.lamb[mask, :]      = 0
 
-            # Eq. 16 — increment penalty within bounds if within force limits
-            mask = (self.force_system.lamb > self.force_system.fmin) & (self.force_system.lamb < self.force_system.fmax)
-            self.force_system.penalty = np.where(
-                mask,
-                np.minimum(self.force_system.penalty + self.beta * np.abs(self.force_system.C),
-                        np.minimum(PENALTY_MAX, self.force_system.stiffness)),
-                self.force_system.penalty
-            )
+        #     # Eq. 16 — increment penalty within bounds if within force limits
+        #     mask = (self.force_system.lamb > self.force_system.fmin) & (self.force_system.lamb < self.force_system.fmax)
+        #     self.force_system.penalty = np.where(
+        #         mask,
+        #         np.minimum(self.force_system.penalty + self.beta * np.abs(self.force_system.C),
+        #                 np.minimum(PENALTY_MAX, self.force_system.stiffness)),
+        #         self.force_system.penalty
+        #     )
             
-            start_dual = time.perf_counter()
+        #     start_dual = time.perf_counter()
             
-            print(f'Dual Update: {(time.perf_counter() - start_dual) * 1000:.3f}ms')
+        #     print(f'Dual Update: {(time.perf_counter() - start_dual) * 1000:.3f}ms')
 
-        self.update_velocities(dt)
+        # self.update_velocities(dt)
             
         total_time = time.perf_counter() - start_time
         if DEBUG_TIMING:
@@ -244,13 +244,18 @@ class Solver:
             c = math.cos(angle)
             s = math.sin(angle)
             
-            # isr TODO rename to fit usage
-            s_ir[i, 0, 0] =  isx * c
-            s_ir[i, 0, 1] =  isx * s
-            s_ir[i, 1, 0] = -isy * s
-            s_ir[i, 1, 1] =  isy * c
+            # irs TODO rename to fit usage
+            # s_ir[i, 0, 0] =  isx * c
+            # s_ir[i, 0, 1] =  isx * s
+            # s_ir[i, 1, 0] = -isy * s
+            # s_ir[i, 1, 1] =  isy * c
             
-            # scale rotate TODO rename to fit usage
+            s_ir[i, 0, 0] =  c
+            s_ir[i, 0, 1] =  s
+            s_ir[i, 1, 0] = -s
+            s_ir[i, 1, 1] =  c
+            
+            # rs TODO rename to fit usage
             irs[i, 0, 0] =  c * sx
             irs[i, 0, 1] = -s * sy
             irs[i, 1, 0] =  s * sx
@@ -260,7 +265,7 @@ class Solver:
     # Force Warmstart
     # ------------------------------------
             
-    @timer('Warmstart Forces', on=DEBUG_TIMING)        
+    @timer('Warmstart Forces', on=DEBUG_TIMING)
     def warmstart_forces(self) -> None:
         current_force = self.forces
         while current_force is not None:

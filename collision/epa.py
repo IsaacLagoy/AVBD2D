@@ -18,7 +18,7 @@ def epa(pos_a, pos_b, sr_a, sr_b, verts_a, verts_b, simplex, faces, sps, normals
     
     cloud_size = 3
     size = 3
-    
+
     # NOTE, we never remove support points
     for _ in range(12):
         # get front of polytope
@@ -31,11 +31,11 @@ def epa(pos_a, pos_b, sr_a, sr_b, verts_a, verts_b, simplex, faces, sps, normals
         for i in range(0, cloud_size):
             if np.abs(sps[i, 0] - sps[cloud_size, 0]) < COLLISION_MARGIN and \
                np.abs(sps[i, 1] - sps[cloud_size, 1]) < COLLISION_MARGIN:
-                   return normals[idx]
+                   return orient_normal(pos_a, pos_b, normals[idx])
                     
         # check that the new found point is past the face
         if dists[idx] > dot(normals[idx], sps[cloud_size]):
-            return normals[idx]
+            return orient_normal(pos_a, pos_b, normals[idx])
         
         # expand the polytope
         set_size = 0
@@ -63,8 +63,14 @@ def epa(pos_a, pos_b, sr_a, sr_b, verts_a, verts_b, simplex, faces, sps, normals
         
     # if algorithm didn't naturally terminate, return nearest guess
     idx = front(dists, size)
-    print(_)
-    return normals[idx]
+    return orient_normal(pos_a, pos_b, normals[idx])
+
+@nb.njit(fastmath=True, inline='always')
+def orient_normal(pos_a, pos_b, normal):
+    dx = pos_a[:2] - pos_b[:2]
+    if dot(dx, normal) < 0:
+        return -normal
+    return normal
         
 @nb.njit(fastmath=True, inline='always')
 def manage_cloud(set, e, size):
@@ -141,13 +147,14 @@ def build_face(sps, faces, normals, dists, idx_a, idx_b, idx_log):
     ey = sps[idx_b, 1] - sps[idx_a, 1]
 
     # Perpendicular facing sps[idx_a]
-    nx = -ey 
+    nx = -ey
     ny = ex
     if nx * sps[idx_a, 0] + ny * sps[idx_a, 1] < 0:
         nx = -nx
         ny = -ny
         
     len2 = nx * nx + ny * ny
+    len2 = np.sqrt(len2)
 
     # sqaure normalize the normal vector
     normals[idx_log, 0] = nx / len2

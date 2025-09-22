@@ -4,9 +4,10 @@ from helper.constants import THREADS
 from collision.gjk import gjk
 from collision.epa import epa
 from collision.sat import sat
+from collision.helper import dot
 
 
-@nb.njit(fastmath=True, parallel=True)
+# @nb.njit(fastmath=True, parallel=True)
 def collide(pairs, vertices, starts, lengths, pos, sr, isr, mesh_index, normals, rAs, rBs, contacts):
     num_pairs = len(pairs)
     
@@ -14,9 +15,11 @@ def collide(pairs, vertices, starts, lengths, pos, sr, isr, mesh_index, normals,
         return
     
     # batch operations
-    batch_size = np.ceil(num_pairs / THREADS)
+    batch_size = int(np.ceil(num_pairs / THREADS))
     
-    for thread in nb.prange(THREADS):
+    print('contacts', len(contacts))
+    
+    for thread in range(THREADS):
         # create buffers for gjk
         index_a = np.empty(3, dtype='int16')
         index_b = np.empty(3, dtype='int16')
@@ -69,8 +72,6 @@ def collide(pairs, vertices, starts, lengths, pos, sr, isr, mesh_index, normals,
             if not collided:
                 continue
             
-            # TODO add body coloring for debug
-            
             mtv = epa(
                 pos_a = pos_a,
                 pos_b = pos_b,
@@ -85,24 +86,45 @@ def collide(pairs, vertices, starts, lengths, pos, sr, isr, mesh_index, normals,
                 dists = distance_buffer,
                 set = set_buffer
             )
+            
+            normals[i, 0] = normals[i, 1] = mtv
         
             contacts[i] = 2
+            temp = 2
+            
+            mtv /= np.sqrt(mtv[0] * mtv[0] + mtv[1] * mtv[1])
             
             isr_a, isr_b = isr[a], isr[b]
             rA, rB = rAs[i], rBs[i]
             
-            sat(
-                pos_a = pos_a,
-                pos_b = pos_b,
-                rs_a = sr_a,
-                rs_b = sr_b,
-                irs_a = isr_a,
-                irs_b = isr_b,
-                verts_a = verts_a,
-                verts_b = verts_b,
-                mtv = mtv,
-                idcs = idcs_buffer,
-                world = world_buffer,
-                rA = rA,
-                rB = rB
-            )
+
+            
+            try:
+                sat(
+                    pos_a = pos_a,
+                    pos_b = pos_b,
+                    rs_a = sr_a,
+                    rs_b = sr_b,
+                    ir_a = isr_a,
+                    ir_b = isr_b,
+                    verts_a = verts_a,
+                    verts_b = verts_b,
+                    mtv = mtv,
+                    idcs = idcs_buffer,
+                    world = world_buffer,
+                    rA = rA,
+                    rB = rB
+                )
+                
+            except ZeroDivisionError:
+                contacts[i] = 1
+                print('division by 0')
+                print(idcs_buffer)
+                print(world_buffer)
+                
+            except Exception as e:
+                contacts[i] = 1
+                print(type(e).__name__)
+
+            # print(temp, contacts[i])
+            # assert temp == contacts[i], 'uh oh memory'

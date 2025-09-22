@@ -1,8 +1,6 @@
 from forces.force import Force
-from forces.force_system import ForceSystem
 from shapes.rigid import Rigid
 import numpy as np
-from collision.collide import collide
 from math import sqrt
 from helper.maths import rotate_scale, cross, transform
 import pygame
@@ -14,18 +12,21 @@ SHOW_CONTACTS = True
 
 class Manifold(Force):
     
-    def __init__(self, system: ForceSystem, body_a: Rigid, body_b: Rigid) -> None:
+    def __init__(self, system, body_a: Rigid, body_b: Rigid, contact_index: int) -> None:
         super().__init__(system, body_a, body_b, 0)
         
         # insert into contacts list
-        self.contact_index = self.system.contacts.insert()
+        self.contact_index = contact_index
         self.system.contacts.contacts[self.contact_index] = self
+        self.system.contacts.size += 1
         
-        # set starting values
-        self.fmax[0] = self.fmax[2] = 0
-        self.fmin[0] = self.fmin[2] = -np.inf
+        # # set starting values
+        # self.fmax[0] = self.fmax[2] = 0
+        # self.fmin[0] = self.fmin[2] = -np.inf
         
     def initialize(self) -> bool:
+        return False
+        
         self.friction = sqrt(self.body_a.friction * self.body_b.friction)
         self.num_contact = collide(self)
         
@@ -64,7 +65,7 @@ class Manifold(Force):
 
         normal_length = 30  # pixels for drawing the normal
 
-        for i in range(self.num_contact):
+        for i in range(2):
             # Contact points in world space
             world_a = transform(self.body_a.pos, self.body_a.scale, self.rA[i])
             world_b = transform(self.body_b.pos, self.body_b.scale, self.rB[i])
@@ -80,14 +81,19 @@ class Manifold(Force):
             pygame.draw.circle(screen, (255, 0, 0), (sx_a, sy_a), 4)
             pygame.draw.circle(screen, (0, 0, 255), (sx_b, sy_b), 4)
 
-            # # Draw contact normal (from A's contact point)
-            # n = self.normal[i]
-            # nx, ny = n.x, n.y
+            # Draw contact normal (from A's contact point)
+            n = self.normal[i]
+            nx, ny = n[0], n[1]
 
-            # end_x = int(sx_a + nx * normal_length)
-            # end_y = int(sy_a - ny * normal_length)  # minus because y is inverted
+            end_x = int(sx_a + nx * normal_length)
+            end_y = int(sy_a - ny * normal_length)  # minus because y is inverted
 
-            # pygame.draw.line(screen, (200, 200, 200), (sx_a, sy_a), (end_x, end_y), 1)
+            pygame.draw.line(screen, (200, 200, 200), (sx_a, sy_a), (end_x, end_y), 1)
+            
+            end_x = int(sx_b + nx * normal_length)
+            end_y = int(sy_b - ny * normal_length)  # minus because y is inverted
+
+            pygame.draw.line(screen, (200, 200, 200), (sx_b, sy_b), (end_x, end_y), 1)
         
     # -----------------
     # Properties
@@ -98,88 +104,10 @@ class Manifold(Force):
     def normal(self):
         return self.system.contacts.normal[self.contact_index]
     
-    @normal.setter
-    def normal(self, value):
-        self.system.contacts.normal[self.contact_index][:] = value
-    
     @property
     def rA(self):
         return self.system.contacts.rA[self.contact_index]
     
-    @rA.setter
-    def rA(self, value):
-        self.system.contacts.rA[self.contact_index][:] = value
-    
     @property
     def rB(self):
         return self.system.contacts.rB[self.contact_index]
-    
-    @rB.setter
-    def rB(self, value):
-        self.system.contacts.rB[self.contact_index][:] = value
-    
-    @property
-    def stick(self):
-        return self.system.contacts.stick[self.contact_index]
-    
-    @stick.setter
-    def stick(self, value):
-        self.system.contacts.stick[self.contact_index][:] = value
-    
-    # Jacobians
-    @property
-    def JAn(self):
-        return self.system.contacts.JAn[self.contact_index]
-    
-    @JAn.setter
-    def JAn(self, value):
-        self.system.contacts.JAn[self.contact_index][:] = value
-    
-    @property
-    def JBn(self):
-        return self.system.contacts.JBn[self.contact_index]
-    
-    @JBn.setter
-    def JBn(self, value):
-        self.system.contacts.JBn[self.contact_index][:] = value
-    
-    @property
-    def JAt(self):
-        return self.system.contacts.JAt[self.contact_index]
-    
-    @JAt.setter
-    def JAt(self, value):
-        self.system.contacts.JAt[self.contact_index][:] = value
-    
-    @property
-    def JBt(self):
-        return self.system.contacts.JBt[self.contact_index]
-    
-    @JBt.setter
-    def JBt(self, value):
-        self.system.contacts.JBt[self.contact_index][:] = value
-    
-    @property
-    def C0(self):
-        return self.system.contacts.C0[self.contact_index]
-    
-    @C0.setter
-    def C0(self, value):
-        self.system.contacts.C0[self.contact_index][:] = value
-    
-    # Manifold variables (scalars)
-    @property
-    def num_contact(self):
-        return self.system.contacts.num_contact[self.contact_index]
-    
-    @num_contact.setter
-    def num_contact(self, value):
-        self.system.contacts.num_contact[self.contact_index] = value
-    
-    @property
-    def friction(self):
-        return self.system.contacts.friction[self.contact_index]
-    
-    @friction.setter
-    def friction(self, value):
-        self.system.contacts.friction[self.contact_index] = value
