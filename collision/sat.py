@@ -1,6 +1,8 @@
 import numpy as np
 import numba as nb
 from collision.helper import transform, transform_direct, dot, mat_x_vec, clamp
+from helper.constants import COLLISION_MARGIN
+
 
 
 # TODO create idcs and world buffers externally
@@ -18,6 +20,7 @@ def sat(pos_a, pos_b, rs_a, rs_b, ir_a, ir_b, verts_a, verts_b, mtv, idcs, world
     # mtv_la = mat_x_vec(rs_a.T, mtv)
     # mtv_lb = mat_x_vec(rs_b.T, mtv)
     
+    # get world location of vertices
     t_verts_a = np.empty((len(verts_a), 2), dtype='float32')
     for i in range(len(verts_a)):
         t_verts_a[i] = mat_x_vec(rs_a, verts_a[i]) + pos_a[:2]
@@ -52,18 +55,7 @@ def intersect(pos_ref, rs_ref, verts_ref, dots_ref, pos_inc, rs_inc, verts_inc, 
     # edg strt ref - [2, 3]
     # min      inc - [4, 5]
     # edg strt inc - [6, 7]
-    
-    # worlds breakdown
-    # 0 - ref enter edge
-    # 1 - ref exit edge
-    # 2 - ref max start
-    # 3 - ref max end
-    
-    # 4 - inc enter edge
-    # 5 - inc exit edge
-    # 6 - inc min start
-    # 7 - inc min end
-    
+
     # rules
     # [2, 3] and [6, 7] cannot be the same! Degenerate
     
@@ -73,7 +65,7 @@ def intersect(pos_ref, rs_ref, verts_ref, dots_ref, pos_inc, rs_inc, verts_inc, 
     print(dots_inc)
     
     # find extreme values
-    max_ref = find_maxs(dots_ref, idcs[:2])
+    max_ref = find_maxs(dots_ref, idcs[0:2])
     min_inc = find_mins(dots_inc, idcs[4:6])
     
     print('(inc above) (ref below) thresh')
@@ -83,27 +75,27 @@ def intersect(pos_ref, rs_ref, verts_ref, dots_ref, pos_inc, rs_inc, verts_inc, 
     find_max_bounds(dots_ref, idcs[2:4], min_inc)
     find_min_bounds(dots_inc, idcs[6:8], max_ref)
     
+    # load world locations
+    world[0] = verts_ref[idcs[0]]
+    world[1] = verts_ref[idcs[1]]
+    world[4] = verts_inc[idcs[4]]
+    world[5] = verts_inc[idcs[5]]
+    
     # find all local space edge intersections
     if idcs[2] != idcs[3]:
-        world[0] = dot_edge_intersect(idcs[2], verts_ref, dots_ref, min_inc, mtv)
-        world[1] = dot_edge_intersect(idcs[3], verts_ref, dots_ref, min_inc, mtv)
-    else:
-        world[0] = verts_ref[idcs[2]]
-        world[1] = verts_ref[idcs[3]]
+        world[2] = dot_edge_intersect(idcs[2], verts_ref, dots_ref, min_inc, mtv)
+        world[3] = dot_edge_intersect(idcs[3], verts_ref, dots_ref, min_inc, mtv)
     
     if idcs[6] != idcs[7]:
-        world[4] = dot_edge_intersect(idcs[6], verts_inc, dots_inc, max_ref, mtv)
-        world[5] = dot_edge_intersect(idcs[7], verts_inc, dots_inc, max_ref, mtv)
-    else:
-        world[4] = verts_ref[idcs[6]]
-        world[5] = verts_ref[idcs[7]]
+        world[6] = dot_edge_intersect(idcs[6], verts_inc, dots_inc, max_ref, mtv)
+        world[7] = dot_edge_intersect(idcs[7], verts_inc, dots_inc, max_ref, mtv)
         
     # clamp is it is a non-inclusive collision
-    if idcs[2] != idcs[3]:
-        edge_clamp(world[0:2], world[6:8]) # clamp min inc to edge ref
-        
     if idcs[6] != idcs[7]:
-        edge_clamp(world[4:6], world[2:4]) # clamp max ref to edge inc
+        edge_clamp(world[6:8], world[0:2]) # clamp min inc to edge ref
+        
+    if idcs[2] != idcs[3]:
+        edge_clamp(world[2:4], world[4:6]) # clamp max ref to edge inc
     
     # convert all points to worlds space
     # transform_quad(rs_ref, pos_ref, world[:4], verts_ref, idcs[:4])
@@ -116,11 +108,11 @@ def intersect(pos_ref, rs_ref, verts_ref, dots_ref, pos_inc, rs_inc, verts_inc, 
     r_rs_inv = np.linalg.inv(rs_ref)
     i_rs_inv = np.linalg.inv(rs_inc)
     
-    r_ref[0] = mat_x_vec(r_rs_inv, world[2] - pos_ref[:2]) 
-    r_ref[1] = mat_x_vec(r_rs_inv, world[3] - pos_ref[:2])
+    r_ref[0] = mat_x_vec(r_rs_inv, world[0] - pos_ref[:2]) 
+    r_ref[1] = mat_x_vec(r_rs_inv, world[1] - pos_ref[:2])
     
-    r_inc[0] = mat_x_vec(i_rs_inv, world[7] - pos_inc[:2])
-    r_inc[1] = mat_x_vec(i_rs_inv, world[6] - pos_inc[:2])
+    r_inc[0] = mat_x_vec(i_rs_inv, world[4] - pos_inc[:2])
+    r_inc[1] = mat_x_vec(i_rs_inv, world[5] - pos_inc[:2])
     
     
 @nb.njit(fastmath=True, inline='always')
@@ -141,9 +133,9 @@ def edge_clamp(e, m):
     """
     Clamp the segment m0, m1 to e0, e1
     """
-    # print('clamping')
-    # print(e)
-    # print(m)
+    print('clamping')
+    print(e)
+    print(m)
     
     v = e[1] - e[0]
     vv = dot(v, v)
@@ -194,7 +186,6 @@ def dot_edge_intersect(start, verts, dots, thresh, mtv):
 def find_maxs(arr, idcs) -> float:
     # constants
     l = len(arr)
-    EPSILON = 1e-8
     
     m = arr[0]
     idcs[0] = 0
@@ -204,13 +195,13 @@ def find_maxs(arr, idcs) -> float:
         c = arr[i]
         
         # check if current value exceeds maximum
-        if c > m + EPSILON:
+        if c > m + COLLISION_MARGIN:
             idcs[0] = i
             idcs[1] = i
             m = c
             
         # check if current value matches maximum
-        elif abs(c - m) <= EPSILON:
+        elif abs(c - m) <= COLLISION_MARGIN:
             idcs[1] = i
             
     return m
@@ -264,7 +255,6 @@ def find_max_bounds(arr, idcs, thresh) -> None:
 def find_mins(arr, idcs) -> float:
     # constants
     l = len(arr)
-    EPSILON = 1e-8
     
     m = arr[0]
     idcs[0] = 0
@@ -274,13 +264,13 @@ def find_mins(arr, idcs) -> float:
         c = arr[i]
         
         # check if current value exceeds maximum
-        if c + EPSILON < m:
+        if c + COLLISION_MARGIN < m:
             idcs[0] = i
             idcs[1] = i
             m = c
             
         # check if current value matches maximum
-        elif abs(c - m) <= EPSILON:
+        elif abs(c - m) <= COLLISION_MARGIN:
             idcs[1] = i
             
     return m
